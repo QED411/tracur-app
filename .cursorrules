@@ -1,0 +1,5 @@
+1. Before every task, read /CLAUDE.md to understand the Roadmap, UI Style Guide, and Lessons Learned.
+2. Always use TypeScript and follow the interface definitions in /app/api/curate/route.ts.
+3. Never use 'any' types; if a type is unknown, ask me for clarification.
+4. For any Firestore update, use the "field: value || null" pattern to avoid undefined errors.
+5. Prioritize mobile-first Tailwind CSS as per the Style Guide.
