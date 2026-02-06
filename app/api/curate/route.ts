@@ -18,7 +18,7 @@ const db = getFirestore(app);
 export async function POST(req: Request) {
   try {
     // USE THE FRESH KEY FROM STEP 2
-    const apiKey = "AIzaSyBIUjYsAe6nMHFeuoqBlpafqcVnDr1VrhA"; 
+    const apiKey = "AIzaSyC6GaDvkqnNbF34edtTeHZ7aA4I0D71P24"; 
 
     const { text, url, title } = await req.json();
 
@@ -67,4 +67,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
+
 
