@@ -1,11 +1,10 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore, collection, addDoc } from "firebase/firestore";
 
 // --- 1. CONFIGURATION ---
 const firebaseConfig = {
-  // PASTE YOUR REAL KEYS HERE:
+  // PASTE YOUR KEYS HERE:
   apiKey: "AIzaSyAx-xjJTlIDLuIlu9PY9ftZs3eohBgvSdQ",
   authDomain: "tracur-d07a8.firebaseapp.com",
   projectId: "tracur-d07a8",
@@ -31,38 +30,50 @@ export async function OPTIONS() {
 export async function POST(req: Request) {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
+    if (!apiKey) {
+        return NextResponse.json({ error: "Missing API Key" }, { status: 500, headers: corsHeaders });
+    }
 
-    // --- 2. TRACER BULLET (Keep this!) ---
+    // --- 2. TRACER BULLET ---
     await addDoc(collection(db, "debug_test"), { 
-        status: "Online", 
+        status: "Bare Metal Mode", 
         timestamp: new Date().toISOString() 
     });
 
-    // --- 3. GEMINI PRO (The Reliable One) ---
     const { text, url, title } = await req.json();
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
+    // --- 3. BARE METAL REQUEST (No Library = No Bugs) ---
+    // We talk directly to the URL. Vercel cannot mess this up.
     const prompt = `
-      Extract locations from the text. Return JSON ONLY.
+      Extract locations from this text. Return JSON ONLY.
       Format: { "locations": [ { "name": "...", "category": "...", "coordinates": { "lat": 0, "lng": 0 }, "note": "..." } ] }
-      Text: "${text.substring(0, 10000)}"
+      Text: "${text.substring(0, 8000)}"
     `;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const rawText = response.text();
-
-    // --- 4. THE SMART PARSER (The Fix) ---
-    // This finds the JSON object {...} even if the AI adds text before/after
-    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
     
-    if (!jsonMatch) {
-        console.error("AI Response was not JSON:", rawText);
-        return NextResponse.json({ error: "AI Format Error" }, { status: 500, headers: corsHeaders });
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }]
+      })
+    });
+
+    if (!response.ok) {
+        const errText = await response.text();
+        console.error("Gemini API Error:", errText);
+        throw new Error(`Gemini API Failed: ${response.status} ${response.statusText}`);
     }
 
+    const geminiData = await response.json();
+    // Digging through the raw JSON structure from Google
+    const rawText = geminiData.candidates[0].content.parts[0].text;
+
+    // --- 4. SMART JSON FINDER ---
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("AI did not return JSON");
+    
     const data = JSON.parse(jsonMatch[0]);
 
     // --- 5. SAVE ---
