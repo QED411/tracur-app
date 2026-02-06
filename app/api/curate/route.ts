@@ -26,7 +26,8 @@ export async function POST(req: Request) {
       Text: "${text.substring(0, 10000)}"
     `;
 
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // CHANGED: Using gemini-2.5-flash to fix the 404 error
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
     
     const response = await fetch(apiUrl, {
       method: "POST",
@@ -36,7 +37,7 @@ export async function POST(req: Request) {
 
     if (!response.ok) {
         const errText = await response.text();
-        console.error("Gemini API Error Detail:", errText); // This will show in Vercel logs
+        console.error("Gemini API Error Detail:", errText);
         throw new Error(`Status: ${response.status} - ${errText}`);
     }
 
