@@ -28,26 +28,27 @@ export async function OPTIONS() {
 
 export async function POST(req: Request) {
   try {
-    // --- 2. YOUR WORKING KEY ---
-    const apiKey = "AIzaSyAShOmvSg4z3jUq274mvy1espdctIsoFdw";
+    // --- 2. THE SANDBOX KEY ---
+    // This key belongs to a fresh project with no billing blocks.
+    const apiKey = "AIzaSyBqZKkCOiB1Zin5gQWVVLUg4dGPh8fj1cM"; 
 
     // --- 3. TRACER BULLET ---
     await addDoc(collection(db, "debug_test"), { 
-        status: "Using Gemini Flash Latest", 
+        status: "Using Sandbox Key", 
         timestamp: new Date().toISOString() 
     });
 
     const { text, url, title } = await req.json();
 
-    // --- 4. THE FIX: USE THE FREE-TIER FRIENDLY MODEL ---
-    // We switched from '2.0-flash' to 'gemini-flash-latest' to avoid the 429 Quota error
+    // --- 4. GEMINI 1.5 FLASH ---
+    // New projects support this model by default. It's fast and reliable.
     const prompt = `
       Extract locations from this text. Return JSON ONLY.
-      Format: { "locations": [ { "name": "...", "category": "...", "coordinates": { "lat": 0, "lng": 0 }, "note": "..." } ] }
+      Format: { "locations": [ { "name": "Exact Name of Place", "category": "Restaurant/Hotel/Activity", "coordinates": { "lat": 0, "lng": 0 }, "note": "One sentence summary" } ] }
       Text: "${text.substring(0, 10000)}"
     `;
 
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
     
     const response = await fetch(apiUrl, {
       method: "POST",
@@ -59,7 +60,6 @@ export async function POST(req: Request) {
 
     if (!response.ok) {
         const errText = await response.text();
-        // If this still fails, we know for sure it's a Billing Setting in Cloud Console
         console.error("Gemini API Error:", errText);
         throw new Error(`Gemini API Failed: ${response.status} ${response.statusText}`);
     }
@@ -73,7 +73,7 @@ export async function POST(req: Request) {
     
     const data = JSON.parse(jsonMatch[0]);
 
-    // --- 6. SAVE ---
+    // --- 6. SAVE TO FIREBASE ---
     const savedIds = [];
     if (data.locations && Array.isArray(data.locations)) {
       for (const loc of data.locations) {
