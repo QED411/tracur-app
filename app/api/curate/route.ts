@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore, collection, addDoc } from "firebase/firestore";
 
+interface LocationResult {
+  name: string;
+  category: string;
+  coordinates: { lat: number; lng: number };
+  googlePlaceId?: string | null;
+  note: string;
+}
 // --- 1. FIREBASE CONFIG ---
 const firebaseConfig = {
   apiKey: "AIzaSyAx-xjJTlIDLuIlu9PY9ftZs3eohBgvSdQ",
@@ -49,13 +56,27 @@ export async function POST(req: Request) {
 
     const data = await response.json();
 const rawText = data.candidates[0].content.parts[0].text;
-
-// This Regex "finds" the JSON even if the AI talks before/after it
 const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-if (!jsonMatch) throw new Error("AI did not return a valid JSON object");
+
+if (!jsonMatch) throw new Error("AI did not return valid JSON");
 
 const aiResult = JSON.parse(jsonMatch[0]);
 
+// TELL TYPESCRIPT WHAT THIS IS:
+const location = aiResult.locations[0] as LocationResult;
+
+const aiResult = JSON.parse(jsonMatch[0]);
+    
+// Now TypeScript will recognize .category and .googlePlaceId
+await addDoc(collection(db, "pins"), {
+  ...location,
+  sourceUrl: url || null, 
+  sourceTitle: title || "New Discovery",
+  status: "draft", 
+  createdAt: new Date(),
+  category: location.category || "landmark",
+  googlePlaceId: location.googlePlaceId || null 
+});
  // --- 3. SAVE AS DRAFT (With Safety Fallbacks) ---
 const docRef = await addDoc(collection(db, "pins"), {
   ...location,
@@ -76,4 +97,5 @@ const docRef = await addDoc(collection(db, "pins"), {
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
+
 
