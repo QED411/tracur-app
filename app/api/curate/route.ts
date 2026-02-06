@@ -1,9 +1,23 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
-import { db } from "../../lib/firebase"; // Import your DB connection
-import { collection, addDoc } from "firebase/firestore";
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { getFirestore, collection, addDoc } from "firebase/firestore";
 
-// 1. Define CORS Headers (The Permission Slip)
+// --- 1. HARDCODED CONFIG (The Fix) ---
+const firebaseConfig = {
+  apiKey: "AIzaSyAx-xjJTlIDLuIlu9PY9ftZs3eohBgvSdQ",
+  authDomain: "tracur-d07a8.firebaseapp.com",
+  projectId: "tracur-d07a8",
+  storageBucket: "tracur-d07a8.firebasestorage.app",
+  messagingSenderId: "305976589302",
+  appId: "1:305976589302:web:21244d4924608f428f25d7",
+  measurementId: "G-WNLS7YM356"
+};
+
+// Initialize DB right here to be safe
+const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
@@ -16,30 +30,28 @@ export async function OPTIONS() {
 
 export async function POST(req: Request) {
   try {
-    const { text, url, title } = await req.json(); // We can also grab URL/Title now!
-    const apiKey = process.env.GEMINI_API_KEY;
+    // --- 2. TRACER BULLET (Test Write) ---
+    try {
+      await addDoc(collection(db, "debug_test"), {
+        msg: "Connection successful!",
+        time: new Date().toISOString()
+      });
+      console.log("Tracer bullet fired: wrote to 'debug_test'");
+    } catch (dbError) {
+      console.error("DATABASE FAIL:", dbError);
+      return NextResponse.json({ error: "DB Connection Failed", details: String(dbError) }, { status: 500, headers: corsHeaders });
+    }
 
-    if (!text) return NextResponse.json({ error: "Text is required" }, { status: 400, headers: corsHeaders });
-    if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY is not set" }, { status: 500, headers: corsHeaders });
+    // --- 3. GEMINI AI ---
+    const { text, url, title } = await req.json();
+    const apiKey = process.env.GEMINI_API_KEY; // Keep this one as an Env Var (it works)
 
-    // 2. ASK GEMINI
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); // Using the working model
 
     const prompt = `
-      Extract specific locations from the text below. 
-      For each location, provide:
-      - Name (official name)
-      - Category (Eat, Stay, Beach, Culture, Adventure, Do)
-      - Coordinates (latitude, longitude)
-      - A short, interesting summary note.
-      
-      Return ONLY valid JSON:
-      {
-        "locations": [
-          { "name": "Place Name", "category": "Eat", "coordinates": { "lat": 0, "lng": 0 }, "note": "Summary" }
-        ]
-      }
+      Extract locations from the text. Return strictly valid JSON.
+      Format: { "locations": [ { "name": "Place Name", "category": "Eat", "coordinates": { "lat": 0, "lng": 0 }, "note": "Summary" } ] }
       Text: "${text}"
     `;
 
@@ -48,31 +60,24 @@ export async function POST(req: Request) {
     const jsonText = response.text().replace(/```json/g, "").replace(/```/g, "").trim();
     const data = JSON.parse(jsonText);
 
-    // 3. SAVE TO FIREBASE (The Missing Step!)
-    // We loop through the locations and save them one by one
+    // --- 4. SAVE REAL DATA ---
     const savedIds = [];
-    if (data.locations && Array.isArray(data.locations)) {
+    if (data.locations) {
       for (const loc of data.locations) {
-        // Add extra metadata (Source URL, etc.)
+        // Saving to "pins" collection
         const docRef = await addDoc(collection(db, "pins"), {
           ...loc,
-          createdAt: new Date(),
-          source: title || "Chrome Extension", // Use the page title as source
+          source: title || "Extension",
           sourceUrl: url || "",
-          importBatch: "Extension Capture"
+          createdAt: new Date()
         });
         savedIds.push(docRef.id);
       }
     }
 
-    // 4. Return Success
     return NextResponse.json({ success: true, savedIds, data }, { headers: corsHeaders });
 
   } catch (error) {
-    console.error("API Error:", error);
-    return NextResponse.json(
-      { error: "Failed to curate", details: String(error) },
-      { status: 500, headers: corsHeaders }
-    );
+    return NextResponse.json({ error: "Server Error", details: String(error) }, { status: 500, headers: corsHeaders });
   }
 }
