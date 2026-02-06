@@ -25,7 +25,7 @@ const firebaseConfig = {
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// --- THE UPDATED API CALL ---
+// --- 3. THE SMART CURATOR ---
 export async function POST(req: Request) {
   try {
     const { text, url, title } = await req.json();
@@ -33,13 +33,33 @@ export async function POST(req: Request) {
     // HARDCODED KEY FOR RELIABILITY
     const apiKey = "AIzaSyC6GaDvkqnNbF34edtTeHZ7aA4I0D71P24"; 
 
+    // THE GENERALIZED PROMPT: Forces specific landmarks like beaches.
     const prompt = `
       Extract the SINGLE most specific landmark from the text below.
-      ... (rest of your prompt logic) ...
+      
+      CRITICAL RULES:
+      1. If a beach, hotel, or restaurant is mentioned (e.g., 'Spiaggia di Cefalù'), use THAT as the name, not the town.
+      2. You MUST provide real-world coordinates. DO NOT return 0,0.
+      3. Since the user is a Lacto-Ovo Vegetarian, highlight any vegetarian food details in the 'note'.
+      4. Return the official 'googlePlaceId' for the specific spot if possible.
+
+      Format JSON ONLY: 
+      { 
+        "locations": [ 
+          { 
+            "name": "Exact Place Name", 
+            "category": "beach|restaurant|hotel|landmark", 
+            "coordinates": { "lat": 0.0, "lng": 0.0 }, 
+            "note": "Paste full text here",
+            "googlePlaceId": "ChIJ..." 
+          } 
+        ] 
+      }
+
+      TEXT TO ANALYZE: "${text}"
     `;
 
-    // Ensure we use backticks for the URL construction
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
     
     const response = await fetch(apiUrl, {
       method: "POST",
@@ -49,46 +69,8 @@ export async function POST(req: Request) {
 
     if (!response.ok) {
         const errText = await response.text();
-        // This will now show the REAL error from Google in your logs
         throw new Error(`Google API Error: ${response.status} - ${errText}`);
     }
-
-    // THE GENERALIZED PROMPT: Works for Sicily, Japan, or anywhere.
-    const prompt = `
-  Extract the SINGLE most specific primary landmark mentioned in the text.
-  
-  Instructions:
-  1. Return exactly ONE location entry.
-  2. If the text mentions a beach (e.g., "half-moon of golden sand in Sicily"), prioritize the beach name "Spiaggia di Cefalù" over the general city center.
-  3. You MUST provide the official 'googlePlaceId' for this specific landmark.
-  4. Use the original text as the 'note'.
-  5. Category must be "beach", "restaurant", "hotel", or "landmark".
-
-  Format JSON ONLY: 
-  { 
-    "locations": [ 
-      { 
-        "name": "Spiaggia di Cefalù", 
-        "googlePlaceId": "ChIJ_fH1U3lF8RIRXfXzP_P0K_Y", 
-        "category": "beach", 
-        "coordinates": { "lat": 38.0385, "lng": 14.0225 }, 
-        "note": "FULL_EXCERPT_HERE" 
-      } 
-    ] 
-  }
-
-  Text: "${text}"
-`;
-
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-    
-    const response = await fetch(apiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-    });
-
-    if (!response.ok) throw new Error("Gemini API is down or key is invalid.");
 
     const data = await response.json();
     const rawAiText = data.candidates[0].content.parts[0].text;
@@ -100,17 +82,19 @@ export async function POST(req: Request) {
     const location = aiResult.locations[0] as LocationResult;
 
     // --- 4. THE SAFETY CATCHER (Prevents Gabon/Null Island) ---
+    // If Gemini fails to find coords and returns 0, we fallback to a Cefalu-area default
     const finalLat = location.coordinates.lat === 0 ? 38.0385 : location.coordinates.lat;
     const finalLng = location.coordinates.lng === 0 ? 14.0225 : location.coordinates.lng;
 
+    // --- 5. SAVE AS DRAFT TO FIRESTORE ---
     const docRef = await addDoc(collection(db, "pins"), {
       name: location.name || "New Discovery",
       category: location.category || "landmark",
       coordinates: { lat: finalLat, lng: finalLng },
       googlePlaceId: location.googlePlaceId || null,
       note: location.note || text,
-      sourceUrl: url || "https://tracur.com", // Fallback for "Unknown Source"
-      sourceTitle: title || "Article Snippet",
+      sourceUrl: url || "Unknown Source", 
+      sourceTitle: title || "New Discovery",
       status: "draft", 
       createdAt: new Date()
     });
@@ -119,8 +103,6 @@ export async function POST(req: Request) {
 
   } catch (error) {
     console.error("Build Error:", error);
-    return NextResponse.json({ error: "Check your API key or data format." }, { status: 500 });
+    return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
-
-
