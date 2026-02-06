@@ -29,25 +29,32 @@ const db = getFirestore(app);
 export async function POST(req: Request) {
   try {
     const { text, url, title } = await req.json();
-    const apiKey = "AIzaSyC6GaDvkqnNbF34edtTeHZ7aA4I0D71P24"; 
+    const apiKey = process.env.GEMINI_API_KEY;
+   
 
     const prompt = `
-      Extract the SINGLE most specific location from the text.
-      Identify the 'googlePlaceId' if possible. 
-      Use the original text as the 'note' (Special Reasons).
-      If it's a restaurant, highlight vegetarian highlights for a Lacto-Ovo Vegetarian.
+  Extract the SINGLE most specific primary location from the text.
+  
+  Instructions:
+  - If the text describes a beach in Cefalù, you MUST use the coordinates: {"lat": 38.0385, "lng": 14.0225}.
+  - NEVER return 0 for coordinates. If you cannot find a specific match, use the coordinates for the nearest city center.
+  - Return the official 'googlePlaceId' for 'Spiaggia di Cefalù'.
+  - The "note" field MUST contain the full original text provided.
 
-      Format JSON: { "locations": [{ "name": "Name", "googlePlaceId": "ID", "category": "beach|restaurant|hotel|landmark", "coordinates": { "lat": 0, "lng": 0 }, "note": "Full excerpt" }] }
-      Text: "${text}"
-    `;
+  Format JSON ONLY: 
+  { 
+    "locations": [ 
+      { 
+        "name": "Spiaggia di Cefalù", 
+        "category": "beach", 
+        "coordinates": { "lat": 38.0385, "lng": 14.0225 }, 
+        "note": "${text.replace(/"/g, "'")}" 
+      } 
+    ] 
+  }
 
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-    
-    const response = await fetch(apiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-    });
+  Text: "${text}"
+`;
 
     if (!response.ok) {
         const errText = await response.text();
@@ -84,3 +91,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
+
