@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore, collection, addDoc } from "firebase/firestore";
 
-// --- 1. HARDCODED CONFIG (The Fix) ---
+// --- 1. YOUR HARDCODED CONFIG ---
 const firebaseConfig = {
   apiKey: "AIzaSyAx-xjJTlIDLuIlu9PY9ftZs3eohBgvSdQ",
   authDomain: "tracur-d07a8.firebaseapp.com",
@@ -14,7 +14,7 @@ const firebaseConfig = {
   measurementId: "G-WNLS7YM356"
 };
 
-// Initialize DB right here to be safe
+// Initialize Firebase (Singleton pattern to prevent crashes)
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
@@ -30,57 +30,39 @@ export async function OPTIONS() {
 
 export async function POST(req: Request) {
   try {
-    // --- 2. TRACER BULLET (Test Write) ---
+    // --- 2. VERIFY API KEY (Fixes TypeScript Error) ---
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.error("GEMINI_API_KEY is missing in Vercel settings");
+      return NextResponse.json({ error: "Server Misconfigured: Missing API Key" }, { status: 500, headers: corsHeaders });
+    }
+
+    // --- 3. TRACER BULLET: Test Database Connection ---
     try {
       await addDoc(collection(db, "debug_test"), {
-        msg: "Connection successful!",
-        time: new Date().toISOString()
+        status: "Connection verified",
+        timestamp: new Date().toISOString()
       });
-      console.log("Tracer bullet fired: wrote to 'debug_test'");
+      console.log("Database connection successful: Wrote to 'debug_test'");
     } catch (dbError) {
-      console.error("DATABASE FAIL:", dbError);
-      return NextResponse.json({ error: "DB Connection Failed", details: String(dbError) }, { status: 500, headers: corsHeaders });
+      console.error("Database Connection Failed:", dbError);
+      return NextResponse.json({ error: "Database Error", details: String(dbError) }, { status: 500, headers: corsHeaders });
     }
 
-    // --- 3. GEMINI AI ---
+    // --- 4. GEMINI AI LOGIC (1.5 Flash) ---
     const { text, url, title } = await req.json();
-    const apiKey = process.env.GEMINI_API_KEY;
-if (!apiKey) {
-  throw new Error("GEMINI_API_KEY is not set");
-}
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); // Using the working model
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const prompt = `
-      Extract locations from the text. Return strictly valid JSON.
-      Format: { "locations": [ { "name": "Place Name", "category": "Eat", "coordinates": { "lat": 0, "lng": 0 }, "note": "Summary" } ] }
-      Text: "${text}"
-    `;
-
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const jsonText = response.text().replace(/```json/g, "").replace(/```/g, "").trim();
-    const data = JSON.parse(jsonText);
-
-    // --- 4. SAVE REAL DATA ---
-    const savedIds = [];
-    if (data.locations) {
-      for (const loc of data.locations) {
-        // Saving to "pins" collection
-        const docRef = await addDoc(collection(db, "pins"), {
-          ...loc,
-          source: title || "Extension",
-          sourceUrl: url || "",
-          createdAt: new Date()
-        });
-        savedIds.push(docRef.id);
-      }
-    }
-
-    return NextResponse.json({ success: true, savedIds, data }, { headers: corsHeaders });
-
-  } catch (error) {
-    return NextResponse.json({ error: "Server Error", details: String(error) }, { status: 500, headers: corsHeaders });
-  }
-}
-
+      You are a travel assistant. Extract specific locations from the text below.
+      Return ONLY valid JSON in this exact format:
+      {
+        "locations": [
+          { 
+            "name": "Exact Name of Place",
+            "category": "Restaurant/Hotel/Activity", 
+            "coordinates": { "lat": 0.0, "lng": 0.0 }, 
+            "note": "One sentence summary" 
+          }
+        ]
