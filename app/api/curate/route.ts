@@ -53,7 +53,7 @@ export async function POST(req: Request) {
     // --- 4. GEMINI AI (1.5 Flash) ---
     const { text, url, title } = await req.json();
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
     // We take a substring to ensure we don't hit token limits unexpectedly
     const cleanText = text ? text.substring(0, 10000) : "";
@@ -106,3 +106,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Server Error", details: String(error) }, { status: 500, headers: corsHeaders });
   }
 }
+
