@@ -44,8 +44,10 @@ export async function POST(req: Request) {
 
     // --- 3. GEMINI AI ---
     const { text, url, title } = await req.json();
-    const apiKey = process.env.GEMINI_API_KEY; // Keep this one as an Env Var (it works)
-
+    const apiKey = process.env.GEMINI_API_KEY;
+if (!apiKey) {
+  throw new Error("GEMINI_API_KEY is not set");
+}
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); // Using the working model
 
@@ -81,3 +83,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Server Error", details: String(error) }, { status: 500, headers: corsHeaders });
   }
 }
+
