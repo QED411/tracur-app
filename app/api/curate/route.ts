@@ -3,8 +3,9 @@ import { NextResponse } from "next/server";
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore, collection, addDoc } from "firebase/firestore";
 
-// --- 1. YOUR CONFIG (Fully Integrated) ---
+// --- 1. CONFIGURATION ---
 const firebaseConfig = {
+  // PASTE YOUR REAL KEYS HERE:
   apiKey: "AIzaSyAx-xjJTlIDLuIlu9PY9ftZs3eohBgvSdQ",
   authDomain: "tracur-d07a8.firebaseapp.com",
   projectId: "tracur-d07a8",
@@ -14,7 +15,6 @@ const firebaseConfig = {
   measurementId: "G-WNLS7YM356"
 };
 
-// Initialize Firebase safely
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
@@ -30,62 +30,42 @@ export async function OPTIONS() {
 
 export async function POST(req: Request) {
   try {
-    // --- 2. VERIFY API KEY ---
-    // This fixes the build error by ensuring apiKey is not undefined
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      console.error("GEMINI_API_KEY is missing.");
-      return NextResponse.json({ error: "Missing API Key" }, { status: 500, headers: corsHeaders });
-    }
+    if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
 
-    // --- 3. TEST DATABASE (TRACER BULLET) ---
-    try {
-      await addDoc(collection(db, "debug_test"), {
-        status: "Online",
-        timestamp: new Date().toISOString()
-      });
-      console.log("Database connection successful.");
-    } catch (dbError) {
-      console.error("Database Connection Failed:", dbError);
-      return NextResponse.json({ error: "Database Error", details: String(dbError) }, { status: 500, headers: corsHeaders });
-    }
+    // --- 2. TRACER BULLET (Keep this!) ---
+    await addDoc(collection(db, "debug_test"), { 
+        status: "Online", 
+        timestamp: new Date().toISOString() 
+    });
 
-    // --- 4. GEMINI AI (1.5 Flash) ---
+    // --- 3. GEMINI PRO (The Reliable One) ---
     const { text, url, title } = await req.json();
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
-    // We take a substring to ensure we don't hit token limits unexpectedly
-    const cleanText = text ? text.substring(0, 10000) : "";
-
     const prompt = `
-      You are a travel assistant. Extract specific locations from the text below.
-      Return ONLY valid JSON in this exact format:
-      {
-        "locations": [
-          { 
-            "name": "Exact Name of Place",
-            "category": "Restaurant/Hotel/Activity", 
-            "coordinates": { "lat": 0.0, "lng": 0.0 }, 
-            "note": "One sentence summary" 
-          }
-        ]
-      }
-      Text to analyze: "${cleanText}"
+      Extract locations from the text. Return JSON ONLY.
+      Format: { "locations": [ { "name": "...", "category": "...", "coordinates": { "lat": 0, "lng": 0 }, "note": "..." } ] }
+      Text: "${text.substring(0, 10000)}"
     `;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
-    const jsonText = response.text().replace(/```json/g, "").replace(/```/g, "").trim();
+    const rawText = response.text();
+
+    // --- 4. THE SMART PARSER (The Fix) ---
+    // This finds the JSON object {...} even if the AI adds text before/after
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     
-    let data;
-    try {
-      data = JSON.parse(jsonText);
-    } catch (parseError) {
-      return NextResponse.json({ error: "AI Format Error", raw: jsonText }, { status: 500, headers: corsHeaders });
+    if (!jsonMatch) {
+        console.error("AI Response was not JSON:", rawText);
+        return NextResponse.json({ error: "AI Format Error" }, { status: 500, headers: corsHeaders });
     }
 
-    // --- 5. SAVE TO FIREBASE ---
+    const data = JSON.parse(jsonMatch[0]);
+
+    // --- 5. SAVE ---
     const savedIds = [];
     if (data.locations && Array.isArray(data.locations)) {
       for (const loc of data.locations) {
@@ -99,11 +79,10 @@ export async function POST(req: Request) {
       }
     }
 
-    return NextResponse.json({ success: true, count: savedIds.length, savedIds }, { headers: corsHeaders });
+    return NextResponse.json({ success: true, savedIds }, { headers: corsHeaders });
 
   } catch (error) {
     console.error("Server Error:", error);
-    return NextResponse.json({ error: "Server Error", details: String(error) }, { status: 500, headers: corsHeaders });
+    return NextResponse.json({ error: String(error) }, { status: 500, headers: corsHeaders });
   }
 }
-
