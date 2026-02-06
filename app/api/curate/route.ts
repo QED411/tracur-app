@@ -1,79 +1,77 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
+import { db } from "../../lib/firebase"; // Import your DB connection
+import { collection, addDoc } from "firebase/firestore";
 
-// 1. Define the "Permission Slip" (CORS Headers)
+// 1. Define CORS Headers (The Permission Slip)
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
-// 2. Handle the "Preflight" Handshake (The Browser asking "Can I talk to you?")
 export async function OPTIONS() {
   return NextResponse.json({}, { headers: corsHeaders });
 }
 
 export async function POST(req: Request) {
   try {
-    const { text } = await req.json();
+    const { text, url, title } = await req.json(); // We can also grab URL/Title now!
     const apiKey = process.env.GEMINI_API_KEY;
 
-    if (!text) {
-      return NextResponse.json(
-        { error: "Text is required" },
-        { status: 400, headers: corsHeaders } // Add headers to errors too
-      );
-    }
+    if (!text) return NextResponse.json({ error: "Text is required" }, { status: 400, headers: corsHeaders });
+    if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY is not set" }, { status: 500, headers: corsHeaders });
 
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: "GEMINI_API_KEY is not set" },
-        { status: 500, headers: corsHeaders }
-      );
-    }
-
+    // 2. ASK GEMINI
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const prompt = `
       Extract specific locations from the text below. 
       For each location, provide:
       - Name (official name)
-      - Category (Eat, Stay, Do)
+      - Category (Eat, Stay, Beach, Culture, Adventure, Do)
       - Coordinates (latitude, longitude)
-      - A short, interesting summary note based *only* on the text provided.
+      - A short, interesting summary note.
       
-      Return ONLY valid JSON in this format:
+      Return ONLY valid JSON:
       {
         "locations": [
-          {
-            "name": "Trattoria Mario",
-            "category": "Eat",
-            "coordinates": { "lat": 43.77, "lng": 11.25 },
-            "note": "Famous for its ribollita and communal tables."
-          }
+          { "name": "Place Name", "category": "Eat", "coordinates": { "lat": 0, "lng": 0 }, "note": "Summary" }
         ]
       }
-
-      Text to analyze: "${text}"
+      Text: "${text}"
     `;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
-    let jsonText = response.text();
-
-    // Clean up potential markdown formatting
-    jsonText = jsonText.replace(/```json/g, "").replace(/```/g, "").trim();
-    
+    const jsonText = response.text().replace(/```json/g, "").replace(/```/g, "").trim();
     const data = JSON.parse(jsonText);
 
-    // 3. Return the Success Response WITH the Permission Slip
-    return NextResponse.json(data, { headers: corsHeaders });
+    // 3. SAVE TO FIREBASE (The Missing Step!)
+    // We loop through the locations and save them one by one
+    const savedIds = [];
+    if (data.locations && Array.isArray(data.locations)) {
+      for (const loc of data.locations) {
+        // Add extra metadata (Source URL, etc.)
+        const docRef = await addDoc(collection(db, "pins"), {
+          ...loc,
+          createdAt: new Date(),
+          source: title || "Chrome Extension", // Use the page title as source
+          sourceUrl: url || "",
+          importBatch: "Extension Capture"
+        });
+        savedIds.push(docRef.id);
+      }
+    }
+
+    // 4. Return Success
+    return NextResponse.json({ success: true, savedIds, data }, { headers: corsHeaders });
 
   } catch (error) {
-    console.error(error);
+    console.error("API Error:", error);
     return NextResponse.json(
-      { error: "Failed to curate", details: error instanceof Error ? error.message : String(error) },
+      { error: "Failed to curate", details: String(error) },
       { status: 500, headers: corsHeaders }
     );
   }
