@@ -17,9 +17,7 @@ const db = getFirestore(app);
 
 export async function POST(req: Request) {
   try {
-    // USE THE FRESH KEY FROM STEP 2
     const apiKey = "AIzaSyC6GaDvkqnNbF34edtTeHZ7aA4I0D71P24"; 
-
     const { text, url, title } = await req.json();
 
     const prompt = `
@@ -28,7 +26,6 @@ export async function POST(req: Request) {
       Text: "${text.substring(0, 10000)}"
     `;
 
-    // Standard 1.5 Flash (Verified available for your setup)
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
     
     const response = await fetch(apiUrl, {
@@ -38,34 +35,35 @@ export async function POST(req: Request) {
     });
 
     if (!response.ok) {
-        throw new Error(`Gemini API Failed: ${response.status} ${response.statusText}`);
+        const errText = await response.text();
+        console.error("Gemini API Error Detail:", errText); // This will show in Vercel logs
+        throw new Error(`Status: ${response.status} - ${errText}`);
     }
 
     const geminiData = await response.json();
     const rawText = geminiData.candidates[0].content.parts[0].text;
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     
-    if (!jsonMatch) throw new Error("AI did not return JSON");
+    if (!jsonMatch) throw new Error("AI failed to provide valid JSON.");
     const data = JSON.parse(jsonMatch[0]);
 
     const savedIds = [];
     if (data.locations && Array.isArray(data.locations)) {
       for (const loc of data.locations) {
-        await addDoc(collection(db, "pins"), {
+        const docRef = await addDoc(collection(db, "pins"), {
           ...loc,
           sourceTitle: title || "Extension",
           sourceUrl: url || "",
           createdAt: new Date()
         });
-        savedIds.push("saved");
+        savedIds.push(docRef.id);
       }
     }
 
     return NextResponse.json({ success: true, savedIds });
 
   } catch (error) {
+    console.error("Final Debug Log:", error);
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
-
-
