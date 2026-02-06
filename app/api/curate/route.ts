@@ -33,22 +33,21 @@ export async function POST(req: Request) {
 
     // --- 3. TRACER BULLET ---
     await addDoc(collection(db, "debug_test"), { 
-        status: "Using Gemini 2.0 Flash", 
+        status: "Using Gemini Flash Latest", 
         timestamp: new Date().toISOString() 
     });
 
     const { text, url, title } = await req.json();
 
-    // --- 4. THE FIX: USE THE MODEL FROM YOUR LIST ---
-    // Your logs proved you have "gemini-2.0-flash". We use that EXACT name.
+    // --- 4. THE FIX: USE THE FREE-TIER FRIENDLY MODEL ---
+    // We switched from '2.0-flash' to 'gemini-flash-latest' to avoid the 429 Quota error
     const prompt = `
       Extract locations from this text. Return JSON ONLY.
       Format: { "locations": [ { "name": "...", "category": "...", "coordinates": { "lat": 0, "lng": 0 }, "note": "..." } ] }
       Text: "${text.substring(0, 10000)}"
     `;
 
-    // UPDATED URL: gemini-2.0-flash
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
     
     const response = await fetch(apiUrl, {
       method: "POST",
@@ -60,6 +59,7 @@ export async function POST(req: Request) {
 
     if (!response.ok) {
         const errText = await response.text();
+        // If this still fails, we know for sure it's a Billing Setting in Cloud Console
         console.error("Gemini API Error:", errText);
         throw new Error(`Gemini API Failed: ${response.status} ${response.statusText}`);
     }
@@ -67,7 +67,7 @@ export async function POST(req: Request) {
     const geminiData = await response.json();
     const rawText = geminiData.candidates[0].content.parts[0].text;
 
-    // --- 5. SMART PARSER (Essential for 2.0 models) ---
+    // --- 5. SMART PARSER ---
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("AI did not return JSON");
     
