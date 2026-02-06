@@ -18,39 +18,68 @@ const db = getFirestore(app);
 export async function POST(req: Request) {
   try {
     const apiKey = "AIzaSyC6GaDvkqnNbF34edtTeHZ7aA4I0D71P24"; 
-    // --- 1. CAPTURE THE DATA ---
-const { text, url, title } = await req.json();
+   export async function POST(req: Request) {
+  try {
+    const { text, url, title, userProfile } = await req.json();
 
-// --- 2. THE REFINED SYSTEM PROMPT ---
-const prompt = `
-  You are a travel data specialist. Extract exactly ONE primary location from the text.
-  
-  Rules:
-  1. Return exactly ONE location entry in the array.
-  2. The 'name' must be the specific destination (e.g., "Spiaggia di Cefalù") not just the city.
-  3. Use official Google Maps categories: "beach", "park", "museum", "restaurant", "hotel", or "landmark".
-  4. The "note" field MUST contain the full original text provided.
-  5. Since the user is a Lacto-Ovo Vegetarian, if the text mentions a restaurant, check if it fits their diet and add "Vegetarian-friendly" to the note if applicable.
+    // FUTURE-PROOFING: This object will eventually be pulled from your DB
+    const userContext = {
+      dietary: "Lacto-Ovo Vegetarian",
+      interests: ["Skiing", "Squash", "History"],
+      disabilityReq: "None specified",
+      ...userProfile // Allows the frontend to override/add preferences
+    };
 
-  Format JSON ONLY: 
-  { 
-    "locations": [ 
-      { 
-        "name": "Spiaggia di Cefalù", 
-        "category": "beach", 
-        "coordinates": { "lat": 38.0385, "lng": 14.0225 }, 
-        "note": "${text.replace(/"/g, "'")}" 
-      } 
-    ] 
+    const prompt = `
+      Extract the SINGLE most specific location from the text.
+      
+      USER CONTEXT (Apply these lenses to the extraction):
+      - Diet: ${userContext.dietary}. If a restaurant, highlight vegetarian options.
+      - Interests: ${userContext.interests.join(", ")}.
+      
+      EXTRACTION RULES:
+      1. Find the 'googlePlaceId'. If not found, use null.
+      2. Category must be: "beach", "restaurant", "hotel", "museum", "park", "landmark".
+      3. The 'note' MUST be the original text provided. These are the 'Special Reasons' for saving.
+      
+      OUTPUT FORMAT (JSON ONLY):
+      {
+        "locations": [{
+          "name": "Official Name",
+          "googlePlaceId": "ID_OR_NULL",
+          "category": "standard_category",
+          "coordinates": { "lat": 0, "lng": 0 },
+          "note": "Original article excerpt goes here",
+          "personalizedInsight": "Why this matches user preferences"
+        }]
+      }
+
+      TEXT: "${text}"
+    `;
+
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    // ... fetch logic follows
+    async function onLocationSaved(locationData) {
+  if (locationData.googlePlaceId) {
+    // 1. Fetch Stars & Reviews from Google Places API
+    const service = new google.maps.places.PlacesService(map);
+    service.getDetails({ placeId: locationData.googlePlaceId }, (place) => {
+      displayRichUI({
+        rating: place.rating,
+        reviews: place.reviews,
+        photos: place.photos,
+        // 2. Link to YouTube 360 search
+        youtubeUrl: `https://www.youtube.com/results?search_query=${encodeURIComponent(place.name)}+360+view`
+      });
+    });
+  } else {
+    // FALLBACK: Use the Article Excerpt
+    displayBasicUI({
+      title: locationData.name,
+      specialReasons: locationData.note
+    });
   }
-
-  Text: "${text}"
-`;
-
-// --- 3. SEND TO GEMINI 2.5 ---
-const modelName = "gemini-2.5-flash"; // Modern stable model for 2026
-const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-    
+}
     const response = await fetch(apiUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -90,4 +119,5 @@ const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelN
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
+
 
