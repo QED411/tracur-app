@@ -28,28 +28,29 @@ export async function OPTIONS() {
 
 export async function POST(req: Request) {
   try {
-    // --- 2. YOUR MANUAL PROJECT KEY ---
-    // PASTE THE KEY FROM 'Tracur-Clean' HERE
+    // --- 2. THE MANUAL CLEAN KEY ---
+    // Make sure this is the key from 'Tracur-Clean'
     const apiKey = "AIzaSyC1-PokMlccCRqz9Ct0lFp35H_wLOv-xKI"; 
 
     // --- 3. TRACER BULLET ---
     await addDoc(collection(db, "debug_test"), { 
-        status: "Using Manual Clean Key", 
+        status: "Using Gemini Pro (Safe Mode)", 
         timestamp: new Date().toISOString() 
     });
 
     const { text, url, title } = await req.json();
 
-    // --- 4. GEMINI 1.5 FLASH ---
-    // This is the default model for new Cloud Console projects.
+    // --- 4. GEMINI PRO ---
+    // We switched to 'gemini-pro' because it is the most compatible model name.
+    // It works on almost all new projects.
     const prompt = `
       Extract locations from this text. Return JSON ONLY.
       Format: { "locations": [ { "name": "Exact Name of Place", "category": "Restaurant/Hotel/Activity", "coordinates": { "lat": 0, "lng": 0 }, "note": "One sentence summary" } ] }
       Text: "${text.substring(0, 10000)}"
     `;
 
-    // URL FOR STANDARD 1.5 FLASH
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // URL FOR GEMINI PRO
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`;
     
     const response = await fetch(apiUrl, {
       method: "POST",
