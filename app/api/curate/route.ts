@@ -28,29 +28,28 @@ export async function OPTIONS() {
 
 export async function POST(req: Request) {
   try {
-    // --- 2. YOUR SANDBOX KEY ---
-    // PASTE THE KEY FROM THE "NEW PROJECT" HERE
-    const apiKey = "AIzaSyDFGpm8xNX2DEKI1murMOP6hkkZGf3GMW4"; 
+    // --- 2. YOUR TRACUR KEY ---
+    // PASTE THE KEY FROM YOUR TIER 1 PROJECT HERE
+    const apiKey = "AIzaSyDQFufw7-fOEmsoYyoAj4KnF7HNUkGyJAs"; 
 
     // --- 3. TRACER BULLET ---
     await addDoc(collection(db, "debug_test"), { 
-        status: "Using Gemini Flash Latest", 
+        status: "Tier 1 Unlocked: Gemini 2.0", 
         timestamp: new Date().toISOString() 
     });
 
     const { text, url, title } = await req.json();
 
-    // --- 4. THE FIX: USE THE ALIAS ---
-    // Your logs proved you have "gemini-flash-latest".
-    // We are using that exact name to prevent the 404 error.
+    // --- 4. GEMINI 2.0 FLASH ---
+    // Since you have Tier 1, we can use the fastest, smartest model in your list.
     const prompt = `
       Extract locations from this text. Return JSON ONLY.
       Format: { "locations": [ { "name": "Exact Name of Place", "category": "Restaurant/Hotel/Activity", "coordinates": { "lat": 0, "lng": 0 }, "note": "One sentence summary" } ] }
       Text: "${text.substring(0, 10000)}"
     `;
 
-    // UPDATED URL: gemini-flash-latest
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
+    // URL FOR GEMINI 2.0 (From your logs earlier)
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
     
     const response = await fetch(apiUrl, {
       method: "POST",
