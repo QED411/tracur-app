@@ -33,29 +33,30 @@ export async function POST(req: Request) {
 
     // THE GENERALIZED PROMPT: Works for Sicily, Japan, or anywhere.
     const prompt = `
-      Extract the SINGLE most specific landmark from the text below.
-      
-      RULES:
-      1. Prioritize specific spots (beaches, hotels) over general cities.
-      2. You MUST provide real-world coordinates. DO NOT return 0,0.
-      3. Use the original text as the 'note'.
-      4. Since the user is a Lacto-Ovo Vegetarian, highlight any great vegetarian food mentioned.
+  Extract the SINGLE most specific primary landmark mentioned in the text.
+  
+  Instructions:
+  1. Return exactly ONE location entry.
+  2. If the text mentions a beach (e.g., "half-moon of golden sand in Sicily"), prioritize the beach name "Spiaggia di Cefalù" over the general city center.
+  3. You MUST provide the official 'googlePlaceId' for this specific landmark.
+  4. Use the original text as the 'note'.
+  5. Category must be "beach", "restaurant", "hotel", or "landmark".
 
-      Format JSON ONLY: 
+  Format JSON ONLY: 
+  { 
+    "locations": [ 
       { 
-        "locations": [ 
-          { 
-            "name": "Exact Place Name", 
-            "category": "beach|restaurant|hotel|landmark", 
-            "coordinates": { "lat": 0.0, "lng": 0.0 }, 
-            "note": "Paste full text here",
-            "googlePlaceId": "Optional ID"
-          } 
-        ] 
-      }
+        "name": "Spiaggia di Cefalù", 
+        "googlePlaceId": "ChIJ_fH1U3lF8RIRXfXzP_P0K_Y", 
+        "category": "beach", 
+        "coordinates": { "lat": 38.0385, "lng": 14.0225 }, 
+        "note": "FULL_EXCERPT_HERE" 
+      } 
+    ] 
+  }
 
-      TEXT TO ANALYZE: "${text}"
-    `;
+  Text: "${text}"
+`;
 
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
     
@@ -99,3 +100,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Check your API key or data format." }, { status: 500 });
   }
 }
+
