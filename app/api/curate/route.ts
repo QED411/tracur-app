@@ -28,26 +28,28 @@ export async function OPTIONS() {
 
 export async function POST(req: Request) {
   try {
-    // --- 2. YOUR NEW AI KEY (Hardcoded) ---
+    // --- 2. YOUR NEW AI KEY ---
+    // This key is authorized, we just need the standard model now.
     const apiKey = "AIzaSyAShOmvSg4z3jUq274mvy1espdctIsoFdw";
 
     // --- 3. TRACER BULLET ---
     await addDoc(collection(db, "debug_test"), { 
-        status: "Using New AI Key", 
+        status: "Final Attempt (Pro + New Key)", 
         timestamp: new Date().toISOString() 
     });
 
     const { text, url, title } = await req.json();
 
-    // --- 4. GEMINI 1.5 FLASH (The Modern Model) ---
-    // Now that we have a fresh key, we can use the fast/cheap model again!
+    // --- 4. THE FIX: GEMINI PRO ---
+    // We are using the "Toyota Camry" of models. It works on every account.
     const prompt = `
       Extract locations from this text. Return JSON ONLY.
       Format: { "locations": [ { "name": "...", "category": "...", "coordinates": { "lat": 0, "lng": 0 }, "note": "..." } ] }
       Text: "${text.substring(0, 8000)}"
     `;
 
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // SWITCHED URL TO GEMINI-PRO
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`;
     
     const response = await fetch(apiUrl, {
       method: "POST",
@@ -72,7 +74,7 @@ export async function POST(req: Request) {
     
     const data = JSON.parse(jsonMatch[0]);
 
-    // --- 6. SAVE TO FIREBASE ---
+    // --- 6. SAVE ---
     const savedIds = [];
     if (data.locations && Array.isArray(data.locations)) {
       for (const loc of data.locations) {
