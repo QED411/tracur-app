@@ -1045,5 +1045,68 @@ calendarExports/
 3. **Chrome extension scaffold** (working code you can test)
 
 **Ready to build?** Let's get you using TraCur for your next trip.
+
+## Development & Prompting Standards
+
+### 1. Firebase & Data Safety
+- **No Undefined:** Never pass `undefined` to Firestore. Always use `field: value || null`.
+- **Atomic Writes:** Use Firebase transactions or batches when updating multiple related documents.
+- **Security First:** Ensure all Firestore queries are structured to eventually work with "User ID" rules (even if we are in MVP mode).
+
+### 2. Next.js & React Best Practices
+- **Server vs Client:** Keep API logic and sensitive keys in `app/api` (Server). Use `"use client"` only for interactive UI components (buttons, swipes).
+- **TypeScript Strictness:** Always define interfaces for API responses. No `any` types.
+- **Tailwind Utility:** Use mobile-first responsive classes for all UI (e.g., `flex-col md:flex-row`).
+
+### 3. AI & Prompting Logic
+- **Structured JSON:** Always ask Gemini for JSON output using a regex-safe wrapper to avoid "AI chatter" breaking the code.
+- **Contextual Memory:** Before writing new features, read the existing `ROADMAP.md` to ensure the logic aligns with the "Dreamer's Workflow."
+- **Lacto-Ovo Validation:** Every restaurant extraction MUST include a "Vegetarian Friendly" check against the excerpt.
+
+### 4. Error Handling
+- **Graceful Fallbacks:** If a Google Place ID is missing, the UI must fall back to showing the original article excerpt ("Special Reasons").
+- **Visible Logs:** API errors should be returned with clear messages so I can debug them in the Vercel logs.
+
+## 🎨 UI & UX Style Guide
+
+### 1. Visual Philosophy: "Clean & Immersive"
+- **Minimalism:** Prioritize intent over decoration. Remove any element that doesn't help the user make a "Dreaming" decision.
+- **Whitespace:** Use an 8px base grid system for all spacing (8px, 16px, 24px, 32px). Never use random pixel values for margins or padding.
+- **Modern Depth:** Use subtle "Glassmorphism" (semi-transparent backgrounds with blur) for overlays and navigation bars to create a sense of layered space.
+
+### 2. Typography (The "Roboto/San Francisco" Rule)
+- **Fonts:** Stick to system fonts (Sans-Serif) for maximum performance and native feel.
+- **Body Text:** Minimum **16px** for readability. Line height should be **1.5** (e.g., 16px text = 24px line height).
+- **Hierarchy:** - H1 (Headings): 24px-28px, Bold.
+  - H2 (Subheadings): 20px-22px, Semibold.
+  - Metadata (Captions): 12px-14px, Medium gray.
+
+### 3. Color & Accessibility (WCAG 2.1 Compliant)
+- **Contrast:** Maintain a minimum contrast ratio of **4.5:1** for all text. Use dark text on light backgrounds (#FFFFFF) or light text on dark mode backgrounds (#121212).
+- **Dietary Highlighting:** Use a specific **"Lacto-Ovo Green"** (#007A78) for vegetarian-friendly tags. It must be high-contrast and easily distinguishable.
+- **Action Colors:** Use a "Primary Blue" (#1B365D) for "Accept" buttons and a "Subtle Gray" or "Soft Red" for "Reject" actions.
+
+### 4. Mobile Interaction Patterns
+- **The "Thumb Zone":** Place primary actions (Swipe, Accept, Save) in the bottom third of the screen for easy one-handed use.
+- **Touch Targets:** Every button or tappable area must be at least **44x44px**.
+- **Micro-interactions:** Add subtle haptic-like feedback (CSS transitions) when a card is swiped or a button is pressed to confirm the action.
+
+### 5. Media & Enrichment
+- **360° Video Integration:** Use a consistent "360°" icon overlay on thumbnails to indicate immersive content.
+- **Google Social Proof:** Star ratings should always follow the Google standard (Yellow stars, number of reviews in parentheses).
+
+## 🧠 Lessons Learned & Critical Fixes
+
+### API & Billing Keys
+- **Organization vs Personal:** Always verify if the API key belongs to the 'Tracur' Organization or a personal project. Use the Org key for production deploys to avoid billing quota issues.
+- **Key Storage:** Never hardcode keys. Use `.env.local` for development and Vercel Environment Variables for production.
+
+### Firebase / Firestore
+- **The 'Undefined' Rule:** Firestore will crash if an `undefined` value is passed. 
+  - **Fix:** Always use the fallback pattern: `field: value || null` or `field: value || ""`.
+- **Nesting Exports:** Never nest an `export async function` inside another block. This causes a Vercel build failure.
+
+### Chrome Extension Communication
+- **URL Safety:** When the extension sends data to the API, it must verify the `sourceUrl` is present. If missing, the API must handle it as `null` rather than letting it be `undefined`.
 ---
 *Last Updated: February 6, 2026*
