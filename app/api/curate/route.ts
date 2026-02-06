@@ -25,11 +25,33 @@ const firebaseConfig = {
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// --- 3. THE SMART CURATOR ---
+// --- THE UPDATED API CALL ---
 export async function POST(req: Request) {
   try {
     const { text, url, title } = await req.json();
-    const apiKey = process.env.GEMINI_API_KEY || "AIzaSyC6GaDvkqnNbF34edtTeHZ7aA4I0D71P24"; 
+    
+    // HARDCODED KEY FOR RELIABILITY
+    const apiKey = "AIzaSyC6GaDvkqnNbF34edtTeHZ7aA4I0D71P24"; 
+
+    const prompt = `
+      Extract the SINGLE most specific landmark from the text below.
+      ... (rest of your prompt logic) ...
+    `;
+
+    // Ensure we use backticks for the URL construction
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+    });
+
+    if (!response.ok) {
+        const errText = await response.text();
+        // This will now show the REAL error from Google in your logs
+        throw new Error(`Google API Error: ${response.status} - ${errText}`);
+    }
 
     // THE GENERALIZED PROMPT: Works for Sicily, Japan, or anywhere.
     const prompt = `
@@ -100,4 +122,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Check your API key or data format." }, { status: 500 });
   }
 }
+
 
