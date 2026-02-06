@@ -36,21 +36,21 @@ export async function POST(req: Request) {
 
     // --- 2. TRACER BULLET ---
     await addDoc(collection(db, "debug_test"), { 
-        status: "Bare Metal Mode", 
+        status: "Bare Metal (Gemini Pro)", 
         timestamp: new Date().toISOString() 
     });
 
     const { text, url, title } = await req.json();
 
-    // --- 3. BARE METAL REQUEST (No Library = No Bugs) ---
-    // We talk directly to the URL. Vercel cannot mess this up.
+    // --- 3. BARE METAL REQUEST (GEMINI PRO) ---
+    // We switched this URL to 'gemini-pro' which is 100% available
     const prompt = `
       Extract locations from this text. Return JSON ONLY.
       Format: { "locations": [ { "name": "...", "category": "...", "coordinates": { "lat": 0, "lng": 0 }, "note": "..." } ] }
       Text: "${text.substring(0, 8000)}"
     `;
 
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`;
     
     const response = await fetch(apiUrl, {
       method: "POST",
@@ -67,10 +67,9 @@ export async function POST(req: Request) {
     }
 
     const geminiData = await response.json();
-    // Digging through the raw JSON structure from Google
     const rawText = geminiData.candidates[0].content.parts[0].text;
 
-    // --- 4. SMART JSON FINDER ---
+    // --- 4. SMART JSON FINDER (The Crash Preventer) ---
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("AI did not return JSON");
     
@@ -80,6 +79,7 @@ export async function POST(req: Request) {
     const savedIds = [];
     if (data.locations && Array.isArray(data.locations)) {
       for (const loc of data.locations) {
+        // Saving to 'pins' because we know that works
         const docRef = await addDoc(collection(db, "pins"), {
           ...loc,
           sourceTitle: title || "Extension",
