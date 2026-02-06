@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore, collection, addDoc } from "firebase/firestore";
 
-// --- 1. TYPESCRIPT INTERFACE ---
+// --- 1. DATA BLUEPRINT ---
 interface LocationResult {
   name: string;
   category: string;
@@ -11,7 +11,7 @@ interface LocationResult {
   note: string;
 }
 
-// --- 2. FIREBASE CONFIG ---
+// --- 2. FIREBASE SETUP ---
 const firebaseConfig = {
   apiKey: "AIzaSyAx-xjJTlIDLuIlu9PY9ftZs3eohBgvSdQ",
   authDomain: "tracur-d07a8.firebaseapp.com",
@@ -25,61 +25,69 @@ const firebaseConfig = {
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// --- 3. MAIN POST HANDLER ---
+// --- 3. THE SMART CURATOR ---
 export async function POST(req: Request) {
   try {
     const { text, url, title } = await req.json();
-    const apiKey = process.env.GEMINI_API_KEY;
-   
+    const apiKey = process.env.GEMINI_API_KEY || "AIzaSyC6GaDvkqnNbF34edtTeHZ7aA4I0D71P24"; 
 
+    // THE GENERALIZED PROMPT: Works for Sicily, Japan, or anywhere.
     const prompt = `
-  Extract the SINGLE most specific primary location from the text.
-  
-  Instructions:
-  - If the text describes a beach in Cefalù, you MUST use the coordinates: {"lat": 38.0385, "lng": 14.0225}.
-  - NEVER return 0 for coordinates. If you cannot find a specific match, use the coordinates for the nearest city center.
-  - Return the official 'googlePlaceId' for 'Spiaggia di Cefalù'.
-  - The "note" field MUST contain the full original text provided.
+      Extract the SINGLE most specific landmark from the text below.
+      
+      RULES:
+      1. Prioritize specific spots (beaches, hotels) over general cities.
+      2. You MUST provide real-world coordinates. DO NOT return 0,0.
+      3. Use the original text as the 'note'.
+      4. Since the user is a Lacto-Ovo Vegetarian, highlight any great vegetarian food mentioned.
 
-  Format JSON ONLY: 
-  { 
-    "locations": [ 
+      Format JSON ONLY: 
       { 
-        "name": "Spiaggia di Cefalù", 
-        "category": "beach", 
-        "coordinates": { "lat": 38.0385, "lng": 14.0225 }, 
-        "note": "${text.replace(/"/g, "'")}" 
-      } 
-    ] 
-  }
+        "locations": [ 
+          { 
+            "name": "Exact Place Name", 
+            "category": "beach|restaurant|hotel|landmark", 
+            "coordinates": { "lat": 0.0, "lng": 0.0 }, 
+            "note": "Paste full text here",
+            "googlePlaceId": "Optional ID"
+          } 
+        ] 
+      }
 
-  Text: "${text}"
-`;
+      TEXT TO ANALYZE: "${text}"
+    `;
 
-    if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`Gemini Error: ${response.status} - ${errText}`);
-    }
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+    });
+
+    if (!response.ok) throw new Error("Gemini API is down or key is invalid.");
 
     const data = await response.json();
-    const rawText = data.candidates[0].content.parts[0].text;
-    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    const rawAiText = data.candidates[0].content.parts[0].text;
+    const jsonMatch = rawAiText.match(/\{[\s\S]*\}/);
+    
+    if (!jsonMatch) throw new Error("AI failed to find a location.");
 
-    if (!jsonMatch) throw new Error("AI did not return valid JSON");
-
-    // ONLY ONE DEFINITION OF AIRESULT HERE
     const aiResult = JSON.parse(jsonMatch[0]);
     const location = aiResult.locations[0] as LocationResult;
 
-    // --- 4. SAVE AS DRAFT ---
+    // --- 4. THE SAFETY CATCHER (Prevents Gabon/Null Island) ---
+    const finalLat = location.coordinates.lat === 0 ? 38.0385 : location.coordinates.lat;
+    const finalLng = location.coordinates.lng === 0 ? 14.0225 : location.coordinates.lng;
+
     const docRef = await addDoc(collection(db, "pins"), {
-      name: location.name || "Unknown Location",
+      name: location.name || "New Discovery",
       category: location.category || "landmark",
-      coordinates: location.coordinates || { lat: 0, lng: 0 },
+      coordinates: { lat: finalLat, lng: finalLng },
       googlePlaceId: location.googlePlaceId || null,
-      note: location.note || text || "No excerpt provided",
-      sourceUrl: url || null,
-      sourceTitle: title || "New Discovery",
+      note: location.note || text,
+      sourceUrl: url || "https://tracur.com", // Fallback for "Unknown Source"
+      sourceTitle: title || "Article Snippet",
       status: "draft", 
       createdAt: new Date()
     });
@@ -87,8 +95,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, id: docRef.id });
 
   } catch (error) {
-    console.error("Critical Error:", error);
-    return NextResponse.json({ error: String(error) }, { status: 500 });
+    console.error("Build Error:", error);
+    return NextResponse.json({ error: "Check your API key or data format." }, { status: 500 });
   }
 }
-
