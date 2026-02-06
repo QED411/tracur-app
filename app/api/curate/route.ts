@@ -28,27 +28,29 @@ export async function OPTIONS() {
 
 export async function POST(req: Request) {
   try {
-    // --- 2. THE SANDBOX KEY ---
-    // This key belongs to a fresh project with no billing blocks.
-    const apiKey = "AIzaSyBqZKkCOiB1Zin5gQWVVLUg4dGPh8fj1cM"; 
+    // --- 2. YOUR SANDBOX KEY ---
+    // PASTE THE KEY FROM THE "NEW PROJECT" HERE
+    const apiKey = "AIzaSyDFGpm8xNX2DEKI1murMOP6hkkZGf3GMW4"; 
 
     // --- 3. TRACER BULLET ---
     await addDoc(collection(db, "debug_test"), { 
-        status: "Using Sandbox Key", 
+        status: "Using Gemini Flash Latest", 
         timestamp: new Date().toISOString() 
     });
 
     const { text, url, title } = await req.json();
 
-    // --- 4. GEMINI 1.5 FLASH ---
-    // New projects support this model by default. It's fast and reliable.
+    // --- 4. THE FIX: USE THE ALIAS ---
+    // Your logs proved you have "gemini-flash-latest".
+    // We are using that exact name to prevent the 404 error.
     const prompt = `
       Extract locations from this text. Return JSON ONLY.
       Format: { "locations": [ { "name": "Exact Name of Place", "category": "Restaurant/Hotel/Activity", "coordinates": { "lat": 0, "lng": 0 }, "note": "One sentence summary" } ] }
       Text: "${text.substring(0, 10000)}"
     `;
 
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    // UPDATED URL: gemini-flash-latest
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
     
     const response = await fetch(apiUrl, {
       method: "POST",
