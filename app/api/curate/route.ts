@@ -18,16 +18,38 @@ const db = getFirestore(app);
 export async function POST(req: Request) {
   try {
     const apiKey = "AIzaSyC6GaDvkqnNbF34edtTeHZ7aA4I0D71P24"; 
-    const { text, url, title } = await req.json();
+    // --- 1. CAPTURE THE DATA ---
+const { text, url, title } = await req.json();
 
-    const prompt = `
-      Extract locations from this text. Return JSON ONLY.
-      Format: { "locations": [ { "name": "Place Name", "category": "Type", "coordinates": { "lat": 0, "lng": 0 }, "note": "Summary" } ] }
-      Text: "${text.substring(0, 10000)}"
-    `;
+// --- 2. THE REFINED SYSTEM PROMPT ---
+const prompt = `
+  You are a travel data specialist. Extract exactly ONE primary location from the text.
+  
+  Rules:
+  1. Return exactly ONE location entry in the array.
+  2. The 'name' must be the specific destination (e.g., "Spiaggia di Cefalù") not just the city.
+  3. Use official Google Maps categories: "beach", "park", "museum", "restaurant", "hotel", or "landmark".
+  4. The "note" field MUST contain the full original text provided.
+  5. Since the user is a Lacto-Ovo Vegetarian, if the text mentions a restaurant, check if it fits their diet and add "Vegetarian-friendly" to the note if applicable.
 
-    // CHANGED: Using gemini-2.5-flash to fix the 404 error
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  Format JSON ONLY: 
+  { 
+    "locations": [ 
+      { 
+        "name": "Spiaggia di Cefalù", 
+        "category": "beach", 
+        "coordinates": { "lat": 38.0385, "lng": 14.0225 }, 
+        "note": "${text.replace(/"/g, "'")}" 
+      } 
+    ] 
+  }
+
+  Text: "${text}"
+`;
+
+// --- 3. SEND TO GEMINI 2.5 ---
+const modelName = "gemini-2.5-flash"; // Modern stable model for 2026
+const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
     
     const response = await fetch(apiUrl, {
       method: "POST",
@@ -68,3 +90,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
+
