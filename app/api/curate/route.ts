@@ -48,18 +48,26 @@ export async function POST(req: Request) {
     }
 
     const data = await response.json();
-    const rawText = data.candidates[0].content.parts[0].text;
-    const aiResult = JSON.parse(rawText.match(/\{[\s\S]*\}/)[0]);
-    const location = aiResult.locations[0];
+const rawText = data.candidates[0].content.parts[0].text;
 
-    // --- 3. SAVE AS DRAFT ---
-    const docRef = await addDoc(collection(db, "pins"), {
-      ...location,
-      sourceUrl: url,
-      sourceTitle: title,
-      status: "draft", // For your "Tinder-style" review queue
-      createdAt: new Date()
-    });
+// This Regex "finds" the JSON even if the AI talks before/after it
+const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+if (!jsonMatch) throw new Error("AI did not return a valid JSON object");
+
+const aiResult = JSON.parse(jsonMatch[0]);
+
+ // --- 3. SAVE AS DRAFT (With Safety Fallbacks) ---
+const docRef = await addDoc(collection(db, "pins"), {
+  ...location,
+  // Using "|| null" ensures Firebase never sees "undefined"
+  sourceUrl: url || "Unknown Source", 
+  sourceTitle: title || "New Discovery",
+  status: "draft", 
+  createdAt: new Date(),
+  // Add these for extra safety if Gemini misses a field
+  category: location.category || "landmark",
+  googlePlaceId: location.googlePlaceId || null 
+});
 
     return NextResponse.json({ success: true, id: docRef.id });
 
@@ -68,3 +76,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
+
