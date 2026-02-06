@@ -28,28 +28,28 @@ export async function OPTIONS() {
 
 export async function POST(req: Request) {
   try {
-    // --- 2. YOUR TRACUR KEY ---
-    // PASTE THE KEY FROM YOUR TIER 1 PROJECT HERE
-    const apiKey = "AIzaSyDQFufw7-fOEmsoYyoAj4KnF7HNUkGyJAs"; 
+    // --- 2. YOUR MANUAL PROJECT KEY ---
+    // PASTE THE KEY FROM 'Tracur-Clean' HERE
+    const apiKey = "AIzaSyC1-PokMlccCRqz9Ct0lFp35H_wLOv-xKI"; 
 
     // --- 3. TRACER BULLET ---
     await addDoc(collection(db, "debug_test"), { 
-        status: "Tier 1 Unlocked: Gemini 2.0", 
+        status: "Using Manual Clean Key", 
         timestamp: new Date().toISOString() 
     });
 
     const { text, url, title } = await req.json();
 
-    // --- 4. GEMINI 2.0 FLASH ---
-    // Since you have Tier 1, we can use the fastest, smartest model in your list.
+    // --- 4. GEMINI 1.5 FLASH ---
+    // This is the default model for new Cloud Console projects.
     const prompt = `
       Extract locations from this text. Return JSON ONLY.
       Format: { "locations": [ { "name": "Exact Name of Place", "category": "Restaurant/Hotel/Activity", "coordinates": { "lat": 0, "lng": 0 }, "note": "One sentence summary" } ] }
       Text: "${text.substring(0, 10000)}"
     `;
 
-    // URL FOR GEMINI 2.0 (From your logs earlier)
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+    // URL FOR STANDARD 1.5 FLASH
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
     
     const response = await fetch(apiUrl, {
       method: "POST",
