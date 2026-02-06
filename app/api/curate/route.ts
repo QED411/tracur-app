@@ -2,9 +2,8 @@ import { NextResponse } from "next/server";
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore, collection, addDoc } from "firebase/firestore";
 
-// --- 1. CONFIGURATION ---
+// --- 1. FIREBASE CONFIG ---
 const firebaseConfig = {
-  // PASTE YOUR KEYS HERE:
   apiKey: "AIzaSyAx-xjJTlIDLuIlu9PY9ftZs3eohBgvSdQ",
   authDomain: "tracur-d07a8.firebaseapp.com",
   projectId: "tracur-d07a8",
@@ -29,28 +28,26 @@ export async function OPTIONS() {
 
 export async function POST(req: Request) {
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-        return NextResponse.json({ error: "Missing API Key" }, { status: 500, headers: corsHeaders });
-    }
+    // --- 2. YOUR NEW AI KEY (Hardcoded) ---
+    const apiKey = "AIzaSyAShOmvSg4z3jUq274mvy1espdctIsoFdw";
 
-    // --- 2. TRACER BULLET ---
+    // --- 3. TRACER BULLET ---
     await addDoc(collection(db, "debug_test"), { 
-        status: "Bare Metal (Gemini Pro)", 
+        status: "Using New AI Key", 
         timestamp: new Date().toISOString() 
     });
 
     const { text, url, title } = await req.json();
 
-    // --- 3. BARE METAL REQUEST (GEMINI PRO) ---
-    // We switched this URL to 'gemini-pro' which is 100% available
+    // --- 4. GEMINI 1.5 FLASH (The Modern Model) ---
+    // Now that we have a fresh key, we can use the fast/cheap model again!
     const prompt = `
       Extract locations from this text. Return JSON ONLY.
       Format: { "locations": [ { "name": "...", "category": "...", "coordinates": { "lat": 0, "lng": 0 }, "note": "..." } ] }
       Text: "${text.substring(0, 8000)}"
     `;
 
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`;
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
     
     const response = await fetch(apiUrl, {
       method: "POST",
@@ -69,17 +66,16 @@ export async function POST(req: Request) {
     const geminiData = await response.json();
     const rawText = geminiData.candidates[0].content.parts[0].text;
 
-    // --- 4. SMART JSON FINDER (The Crash Preventer) ---
+    // --- 5. SMART JSON FINDER ---
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("AI did not return JSON");
     
     const data = JSON.parse(jsonMatch[0]);
 
-    // --- 5. SAVE ---
+    // --- 6. SAVE TO FIREBASE ---
     const savedIds = [];
     if (data.locations && Array.isArray(data.locations)) {
       for (const loc of data.locations) {
-        // Saving to 'pins' because we know that works
         const docRef = await addDoc(collection(db, "pins"), {
           ...loc,
           sourceTitle: title || "Extension",
