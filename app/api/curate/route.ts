@@ -28,29 +28,29 @@ export async function OPTIONS() {
 
 export async function POST(req: Request) {
   try {
-    // --- 2. THE CLEAN KEY ---
+    // --- 2. YOUR MANUAL CLEAN KEY ---
     // PASTE THE KEY FROM 'Tracur-Clean' HERE
     const apiKey = "AIzaSyC1-PokMlccCRqz9Ct0lFp35H_wLOv-xKI"; 
 
     // --- 3. TRACER BULLET ---
     await addDoc(collection(db, "debug_test"), { 
-        status: "Final Victory: Clean Key + Gemini 2.0", 
+        status: "Final Attempt: Flash Latest", 
         timestamp: new Date().toISOString() 
     });
 
     const { text, url, title } = await req.json();
 
-    // --- 4. THE CORRECT MODEL NAME ---
-    // Your logs confirm: "models/gemini-2.0-flash" exists.
-    // We use that EXACT name.
+    // --- 4. THE FREE TIER MODEL ---
+    // We are downgrading from 2.0 to 'gemini-flash-latest' to avoid the 429 billing block.
+    // This model name WAS in your logs, so it definitely exists.
     const prompt = `
       Extract locations from this text. Return JSON ONLY.
       Format: { "locations": [ { "name": "Exact Name of Place", "category": "Restaurant/Hotel/Activity", "coordinates": { "lat": 0, "lng": 0 }, "note": "One sentence summary" } ] }
       Text: "${text.substring(0, 10000)}"
     `;
 
-    // URL FOR GEMINI 2.0 FLASH
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+    // URL FOR FLASH LATEST
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
     
     const response = await fetch(apiUrl, {
       method: "POST",
