@@ -2,16 +2,6 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { db } from "@/app/lib/firebase";
-import {
-  collection,
-  query,
-  where,
-  onSnapshot,
-  updateDoc,
-  deleteDoc,
-  doc,
-} from "firebase/firestore";
 
 const getCategoryIcon = (category: string) => {
   const cat = (category || "").toLowerCase();
@@ -68,20 +58,28 @@ export default function ReviewPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ placeId: pin.googlePlaceId, pinId: pin.id }),
-    }).catch(() => {});
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.rating != null || data.userRatingCount != null) {
+          setDrafts((prev) =>
+            prev.map((p) =>
+              p.id === pin.id ? { ...p, rating: data.rating ?? p.rating, userRatingCount: data.userRatingCount ?? p.userRatingCount } : p
+            )
+          );
+        }
+      })
+      .catch(() => {});
   }, [drafts, currentIndex]);
 
   useEffect(() => {
-    const q = query(
-      collection(db, "pins"),
-      where("status", "==", "draft")
-    );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const pins = snapshot.docs.map((d) => ({ id: d.id, ...d.data() })) as DraftPin[];
-      setDrafts(pins);
-      setCurrentIndex(0);
-    });
-    return () => unsubscribe();
+    fetch("/api/pins?status=draft")
+      .then((r) => r.json())
+      .then((pins: DraftPin[]) => {
+        setDrafts(Array.isArray(pins) ? pins : []);
+        setCurrentIndex(0);
+      })
+      .catch((e) => console.error("Failed to load drafts:", e));
   }, []);
 
   const current = drafts[currentIndex];
@@ -89,8 +87,15 @@ export default function ReviewPage() {
   const handleAccept = async () => {
     if (!current) return;
     try {
-      await updateDoc(doc(db, "pins", current.id), { status: "confirmed" });
-      setCurrentIndex((i) => Math.min(i, drafts.length - 2));
+      const res = await fetch(`/api/pins/${current.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "confirmed" }),
+      });
+      if (res.ok) {
+        setDrafts((prev) => prev.filter((p) => p.id !== current.id));
+        setCurrentIndex((i) => Math.max(0, Math.min(i, drafts.length - 2)));
+      }
     } catch (e) {
       console.error(e);
     }
@@ -99,8 +104,11 @@ export default function ReviewPage() {
   const handleReject = async () => {
     if (!current) return;
     try {
-      await deleteDoc(doc(db, "pins", current.id));
-      setCurrentIndex((i) => Math.max(0, Math.min(i, drafts.length - 2)));
+      const res = await fetch(`/api/pins/${current.id}`, { method: "DELETE" });
+      if (res.ok) {
+        setDrafts((prev) => prev.filter((p) => p.id !== current.id));
+        setCurrentIndex((i) => Math.max(0, Math.min(i, drafts.length - 2)));
+      }
     } catch (e) {
       console.error(e);
     }

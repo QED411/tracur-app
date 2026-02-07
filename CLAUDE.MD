@@ -1095,16 +1095,45 @@ calendarExports/
 - **360° Video Integration:** Use a consistent "360°" icon overlay on thumbnails to indicate immersive content.
 - **Google Social Proof:** Star ratings should always follow the Google standard (Yellow stars, number of reviews in parentheses).
 
+## ⚠️ Curate API & Map UI – Critical Implementation (DO NOT REMOVE)
+
+When modifying `/api/curate` or `app/page.tsx`, preserve these behaviors:
+
+### Curate Extraction
+- **Primary place over town:** When text describes a destination with a dominant feature (beach, cathedral), extract that FEATURE with its proper name (e.g. "Spiaggia di Cefalù" not just "Cefalù").
+- **Local names:** Use Italian names for Italian places (Spiaggia=beach, Duomo=cathedral). Same for other locales.
+- **Note pairing:** Each note must belong ONLY to its place. Never mix notes between places (e.g. Spiaggia gets its own note, Petrokopio gets its own).
+- **Category extraction:** Include category (Beach, Eat, Stay, Culture, Adventure, Do) in Gemini output. Use for map icon/symbol.
+- **Location context:** First pass extracts city/region (e.g. "Cefalù, Italy") for accurate geocoding; append to Places query.
+- **Display name:** Persist extracted name (e.g. "Spiaggia di Cefalù") to DB when available; don't overwrite with generic Google result.
+
+### Sidebar & Map Sync
+- **Scroll-to-map:** When user scrolls the left sidebar, the map MUST pan to the pin for the card most visible (center of viewport).
+- **Note in sidebar:** Each location card shows its curated note. Notes must appear in the left scroll bar.
+- **Category icons:** Map markers and list items use category-based icons (Beach, Eat, Stay, etc.).
+- **Sidebar scroll:** Sidebar needs `min-h-0` in flex layout so `overflow-y-auto` works (user can scroll to top).
+
+### Data Flow
+- **google_place_id:** Save for enrich-place API (review page ratings). Curate sets `google_place_id = place_id`.
+- **Pins API:** Return `rating` and `userRatingCount` at top level (flattened from enrichment) for review page.
+- **URL scraping + bulk extraction:** Both must be supported. Scrape via Readability; bulk extract via Gemini JSON array.
+
+---
+
 ## 🧠 Lessons Learned & Critical Fixes
 
 ### API & Billing Keys
 - **Organization vs Personal:** Always verify if the API key belongs to the 'Tracur' Organization or a personal project. Use the Org key for production deploys to avoid billing quota issues.
 - **Key Storage:** Never hardcode keys. Use `.env.local` for development and Vercel Environment Variables for production.
+- **Gemini API_KEY_HTTP_REFERRER_BLOCKED (403):** Server-side Gemini calls fail when the key has HTTP referrer restrictions (browser-only). Server requests have no referrer.
+  - **Fix:** Google Cloud Console → Credentials → Edit the key used for GEMINI_API_KEY → Application restrictions: "None" or "IP addresses" (not HTTP referrers). API restrictions: allow Generative Language API.
 
 ### Firebase / Firestore
 - **The 'Undefined' Rule:** Firestore will crash if an `undefined` value is passed. 
   - **Fix:** Always use the fallback pattern: `field: value || null` or `field: value || ""`.
 - **Nesting Exports:** Never nest an `export async function` inside another block. This causes a Vercel build failure.
+- **Firestore NOT_FOUND (Code 5):** Server-side curate API writes fail with `RPC 'Write' error. Code: 5 NOT_FOUND` when Firestore database doesn't exist in the project.
+  - **Fix:** Firebase Console → Select project matching `NEXT_PUBLIC_FIREBASE_PROJECT_ID` → Build → Firestore Database → Create database (Native mode). Use the default `(default)` database.
 
 ### Chrome Extension Communication
 - **URL Safety:** When the extension sends data to the API, it must verify the `sourceUrl` is present. If missing, the API must handle it as `null` rather than letting it be `undefined`.
@@ -1115,4 +1144,4 @@ calendarExports/
 - **Strategic Planning (Gemini 3 Pro):** Use for brainstorming new Phase 2 features and interpreting Google Maps/YouTube API docs.
 
 ---
-*Last Updated: February 6, 2026*
+*Last Updated: February 7, 2026*

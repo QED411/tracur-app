@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { doc, updateDoc } from "firebase/firestore";
-import { db } from "@/app/lib/firebase";
+import { sql, ensureSchema } from "@/app/lib/db";
 
 async function fetchPlaceRating(placeId: string): Promise<{ rating: number | null; userRatingCount: number | null }> {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
@@ -36,7 +35,7 @@ export async function GET(req: Request) {
   return NextResponse.json({ rating, userRatingCount });
 }
 
-/** POST: Enrich a pin by placeId, update Firestore. Body: { placeId, pinId } */
+/** POST: Enrich a pin by placeId, update Postgres. Body: { placeId, pinId } */
 export async function POST(req: Request) {
   try {
     const { placeId, pinId } = await req.json();
@@ -44,10 +43,11 @@ export async function POST(req: Request) {
 
     const { rating, userRatingCount } = await fetchPlaceRating(placeId);
     if (rating != null || userRatingCount != null) {
-      await updateDoc(doc(db, "pins", pinId), {
-        rating: rating ?? null,
-        userRatingCount: userRatingCount ?? null,
-      });
+      await ensureSchema();
+      await sql`
+        UPDATE pins SET enrichment = COALESCE(enrichment, '{}'::jsonb) || ${JSON.stringify({ rating: rating ?? null, userRatingCount: userRatingCount ?? null })}::jsonb
+        WHERE id = ${pinId}
+      `;
     }
     return NextResponse.json({ success: true, rating, userRatingCount });
   } catch (e) {
