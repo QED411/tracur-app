@@ -23,8 +23,10 @@ export default function Home() {
   const [importing, setImporting] = useState(false);
   const [selected, setSelected] = useState<any>(null);
 
-  const { isLoaded } = useLoadScript({
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY as string,
+  const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+  const { isLoaded, loadError } = useLoadScript({
+    googleMapsApiKey,
+    libraries: ["places"],
   });
 
   // LIVE SYNC - confirmed pins + legacy (no status) for map; drafts go to /review
@@ -184,7 +186,23 @@ export default function Home() {
     } catch (error) { console.error("Error moving pin:", error); }
   };
 
-  if (!isLoaded) return <div>Loading Map...</div>;
+  if (!googleMapsApiKey) {
+    return (
+      <div className="p-8 text-center">
+        <p className="text-red-600 font-medium">Google Maps API key is missing.</p>
+        <p className="text-gray-600 mt-2 text-sm">Add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to .env.local</p>
+      </div>
+    );
+  }
+  if (loadError) {
+    return (
+      <div className="p-8 text-center">
+        <p className="text-red-600 font-medium">Map failed to load</p>
+        <p className="text-gray-600 mt-2 text-sm">{String(loadError)}</p>
+      </div>
+    );
+  }
+  if (!isLoaded) return <div className="p-8">Loading Map...</div>;
 
   return (
     <div className="flex h-screen font-sans">

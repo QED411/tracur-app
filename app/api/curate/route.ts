@@ -111,10 +111,15 @@ export async function POST(req: NextRequest) {
     const data = await response.json();
     const rawAiText = data.candidates[0].content.parts[0].text;
     const jsonMatch = rawAiText.match(/\{[\s\S]*\}/);
-    
+
     if (!jsonMatch) throw new Error("AI failed to find a location.");
 
-    const aiResult = JSON.parse(jsonMatch[0]);
+    // Strip markdown backticks (```json or ```) that the AI might include
+    let cleanedText = jsonMatch[0].trim();
+    cleanedText = cleanedText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/g, "");
+    console.log("Final AI JSON:", cleanedText);
+
+    const aiResult = JSON.parse(cleanedText);
     const location = aiResult.locations[0] as LocationResult;
 
     // --- 4. THE SAFETY CATCHER (Prevents Gabon/Null Island) ---
