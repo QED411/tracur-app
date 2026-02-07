@@ -1,6 +1,34 @@
-import { NextResponse } from "next/server";
-import { collection, addDoc } from "firebase/firestore";
+import { NextRequest, NextResponse } from 'next/server';
+
+export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
+
+import { collection, addDoc, doc, updateDoc } from "firebase/firestore";
 import { db } from "@/app/lib/firebase";
+
+async function fetchPlaceRating(placeId: string): Promise<{ rating: number | null; userRatingCount: number | null }> {
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  if (!apiKey) return { rating: null, userRatingCount: null };
+  try {
+    const res = await fetch(
+      `https://places.googleapis.com/v1/places/${placeId}`,
+      {
+        headers: {
+          "X-Goog-Api-Key": apiKey,
+          "X-Goog-FieldMask": "rating,userRatingCount",
+        },
+      }
+    );
+    if (!res.ok) return { rating: null, userRatingCount: null };
+    const data = await res.json();
+    return {
+      rating: data.rating ?? null,
+      userRatingCount: data.userRatingCount ?? null,
+    };
+  } catch {
+    return { rating: null, userRatingCount: null };
+  }
+}
 
 // --- 1. DATA BLUEPRINT ---
 interface LocationResult {
@@ -12,9 +40,16 @@ interface LocationResult {
 }
 
 // --- 3. THE SMART CURATOR ---
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const { text, url, title } = await req.json();
+    const body = await req.json();
+    const text = body.text ?? body.excerpt ?? "";
+    const url = body.url ?? "Unknown Source";
+    const title = body.title ?? "New Discovery";
+
+    if (!text) {
+      throw new Error("Request body must include 'text' or 'excerpt'.");
+    }
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -47,7 +82,7 @@ export async function POST(req: Request) {
       TEXT TO ANALYZE: "${text}"
     `;
 
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=${apiKey}`;
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
     const delays = [2000, 4000, 8000];
 
     const fetchWithRetry = async (attempt = 0): Promise<Response> => {
@@ -88,17 +123,32 @@ export async function POST(req: Request) {
     const finalLng = location.coordinates.lng === 0 ? 14.0225 : location.coordinates.lng;
 
     // --- 5. SAVE AS DRAFT TO FIRESTORE ---
-    const docRef = await addDoc(collection(db, "pins"), {
+    const pinData = {
       name: location.name || "New Discovery",
       category: location.category || "landmark",
       coordinates: { lat: finalLat, lng: finalLng },
       googlePlaceId: location.googlePlaceId || null,
       note: location.note || text,
-      sourceUrl: url || "Unknown Source", 
-      sourceTitle: title || "New Discovery",
-      status: "draft", 
-      createdAt: new Date()
-    });
+      sourceUrl: url,
+      sourceTitle: title,
+      status: "draft" as const,
+      createdAt: new Date(),
+      rating: null as number | null,
+      userRatingCount: null as number | null,
+    };
+
+    const docRef = await addDoc(collection(db, "pins"), pinData);
+
+    // --- 6. ENRICH WITH GOOGLE PLACE RATING (when placeId available) ---
+    if (location.googlePlaceId) {
+      const { rating, userRatingCount } = await fetchPlaceRating(location.googlePlaceId);
+      if (rating != null || userRatingCount != null) {
+        await updateDoc(doc(db, "pins", docRef.id), {
+          rating: rating ?? null,
+          userRatingCount: userRatingCount ?? null,
+        });
+      }
+    }
 
     return NextResponse.json({ success: true, id: docRef.id });
 

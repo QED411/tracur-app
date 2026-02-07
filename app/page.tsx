@@ -1,8 +1,9 @@
 "use client";
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { GoogleMap, MarkerF, InfoWindowF, useLoadScript } from "@react-google-maps/api";
 import { db } from "./lib/firebase"; 
-import { collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, writeBatch, query, where, getDocs } from "firebase/firestore";
+import { collection, deleteDoc, updateDoc, doc, onSnapshot, writeBatch, query, where, getDocs } from "firebase/firestore";
 
 // Helper for icons (Frontend Display)
 const getCategoryIcon = (category: string) => {
@@ -26,12 +27,13 @@ export default function Home() {
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY as string,
   });
 
-  // LIVE SYNC
+  // LIVE SYNC - confirmed pins + legacy (no status) for map; drafts go to /review
   useEffect(() => {
     if (!db) return;
     const unsubscribe = onSnapshot(collection(db, "pins"), (snapshot) => {
-      const savedPins = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setLocations(savedPins);
+      const all = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+      const confirmed = all.filter((p) => p.status !== "draft");
+      setLocations(confirmed);
     });
     return () => unsubscribe();
   }, []);
@@ -102,25 +104,20 @@ export default function Home() {
     document.body.removeChild(link);
   };
 
-  // --- AI CURATION ---
+  // --- AI CURATION --- (API saves draft to Firestore; pins appear via onSnapshot)
   const handleCurate = async () => {
+    if (!inputText.trim()) return;
     setLoading(true);
     try {
       const res = await fetch("/api/curate", { method: "POST", body: JSON.stringify({ text: inputText }) });
       const data = await res.json();
-      if (data.locations) {
-        for (const loc of data.locations) {
-          const exists = locations.find(l => l.name === loc.name);
-          if (!exists) {
-            await addDoc(collection(db, "pins"), {
-              ...loc, createdAt: new Date(), source: "AI Curation", importBatch: "Manual AI Curation"
-            });
-          }
-        }
-      }
-    } catch (e) { console.error(e); alert("Error saving: Check Console"); }
+      if (data.error) throw new Error(data.error);
+      setInputText("");
+    } catch (e) {
+      console.error(e);
+      alert("Error curating. Check console.");
+    }
     setLoading(false);
-    setInputText(""); 
   };
 
   // --- IMPORT ---
@@ -192,7 +189,15 @@ export default function Home() {
   return (
     <div className="flex h-screen font-sans">
       <div className="w-1/3 p-4 bg-gray-100 overflow-y-auto border-r border-gray-300">
-        <h1 className="text-xl font-bold mb-4 text-blue-600">TraCur</h1>
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-xl font-bold text-blue-600">TraCur</h1>
+          <Link
+            href="/review"
+            className="text-sm font-medium px-3 py-1.5 rounded-lg bg-[#1B365D] text-white hover:opacity-90"
+          >
+            Review drafts
+          </Link>
+        </div>
         
         {/* ADD TEXT */}
         <div className="mb-6 border-b pb-6">
