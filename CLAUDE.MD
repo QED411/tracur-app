@@ -1100,6 +1100,7 @@ calendarExports/
 ### API & Billing Keys
 - **Organization vs Personal:** Always verify if the API key belongs to the 'Tracur' Organization or a personal project. Use the Org key for production deploys to avoid billing quota issues.
 - **Key Storage:** Never hardcode keys. Use `.env.local` for development and Vercel Environment Variables for production.
+- **Hardcoded Keys Trigger 403:** Google detects API keys that have been committed to version control and revokes or restricts them. Hardcoding keys causes 403 Forbidden errors from Google APIs. Always use `process.env.GEMINI_API_KEY` (and other env vars) instead.
 
 ### Firebase / Firestore
 - **The 'Undefined' Rule:** Firestore will crash if an `undefined` value is passed. 

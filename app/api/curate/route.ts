@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore, collection, addDoc } from "firebase/firestore";
+import { collection, addDoc } from "firebase/firestore";
+import { db } from "@/app/lib/firebase";
 
 // --- 1. DATA BLUEPRINT ---
 interface LocationResult {
@@ -11,27 +11,15 @@ interface LocationResult {
   note: string;
 }
 
-// --- 2. FIREBASE SETUP ---
-const firebaseConfig = {
-  apiKey: "AIzaSyAx-xjJTlIDLuIlu9PY9ftZs3eohBgvSdQ",
-  authDomain: "tracur-d07a8.firebaseapp.com",
-  projectId: "tracur-d07a8",
-  storageBucket: "tracur-d07a8.firebasestorage.app",
-  messagingSenderId: "305976589302",
-  appId: "1:305976589302:web:21244d4924608f428f25d7",
-  measurementId: "G-WNLS7YM356"
-};
-
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-const db = getFirestore(app);
-
 // --- 3. THE SMART CURATOR ---
 export async function POST(req: Request) {
   try {
     const { text, url, title } = await req.json();
-    
-    // HARDCODED KEY FOR RELIABILITY
-    const apiKey = "AIzaSyC6GaDvkqnNbF34edtTeHZ7aA4I0D71P24"; 
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error("GEMINI_API_KEY is not configured. Add it to .env.local and Vercel Environment Variables.");
+    }
 
     // THE GENERALIZED PROMPT: Forces specific landmarks like beaches.
     const prompt = `
@@ -59,17 +47,30 @@ export async function POST(req: Request) {
       TEXT TO ANALYZE: "${text}"
     `;
 
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-    
-    const response = await fetch(apiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-    });
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=${apiKey}`;
+    const delays = [2000, 4000, 8000];
+
+    const fetchWithRetry = async (attempt = 0): Promise<Response> => {
+      const res = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+      });
+      if (res.status === 429 && attempt < 3) {
+        await new Promise((r) => setTimeout(r, delays[attempt]));
+        return fetchWithRetry(attempt + 1);
+      }
+      return res;
+    };
+
+    const response = await fetchWithRetry();
 
     if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`Google API Error: ${response.status} - ${errText}`);
+      const errText = await response.text();
+      const errMsg = response.status === 429
+        ? "Google Billing Sync in progress. Please wait a moment."
+        : `Google API Error: ${response.status} - ${errText}`;
+      throw new Error(errMsg);
     }
 
     const data = await response.json();

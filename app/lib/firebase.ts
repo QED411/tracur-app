@@ -1,18 +1,17 @@
 // app/lib/firebase.ts
-import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
+import { getFirestore, Firestore } from "firebase/firestore";
 
-// REPLACE WITH YOUR REAL KEYS FROM FIREBASE CONSOLE
 const firebaseConfig = {
-  apiKey: "AIzaSyAx-xjJTlIDLuIlu9PY9ftZs3eohBgvSdQ",
-  authDomain: "tracur-d07a8.firebaseapp.com",
-  projectId: "tracur-d07a8",
-  storageBucket: "tracur-d07a8.firebasestorage.app",
-  messagingSenderId: "305976589302",
-  appId: "1:305976589302:web:21244d4924608f428f25d7",
-  measurementId: "G-WNLS7YM356"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
 
-
-const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+// Singleton: reuse existing app to prevent "Firebase App already exists" errors
+const app: FirebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+export const db: Firestore = getFirestore(app);
