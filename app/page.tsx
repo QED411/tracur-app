@@ -17,6 +17,7 @@ function toPinShape(p: Record<string, unknown>) {
     importBatch: p.importBatch ?? p.import_batch ?? null,
     sourceUrl: p.sourceUrl ?? p.source_url ?? null,
     enrichment: (p.enrichment as Record<string, unknown>) ?? {},
+    googlePlaceId: p.googlePlaceId ?? p.google_place_id ?? null,
   };
 }
 
@@ -33,71 +34,134 @@ function batchLabel(batch: string | undefined, sourceUrl?: string | null): strin
   return batch || "Quick Add";
 }
 
-/** Enriched pin InfoWindow - Google Maps data + curated note */
+/** Map popup: Google Maps data only (website, directions, photos). Notes stay in sidebar. */
 function PinInfoWindow({
   pin,
   mapsApiKey,
 }: {
-  pin: { name: string; note?: string; coordinates?: { lat: number; lng: number }; enrichment?: Record<string, unknown>; sourceUrl?: string | null };
+  pin: { name: string; coordinates?: { lat: number; lng: number }; enrichment?: Record<string, unknown>; sourceUrl?: string | null; googlePlaceId?: string | null };
   mapsApiKey: string;
 }) {
+  const [details, setDetails] = useState<Record<string, unknown> | null>(null);
+  const [youtubeVideo, setYoutubeVideo] = useState<{ videoId: string; title: string; channelTitle: string; thumbnailUrl: string } | null>(null);
   const e = pin.enrichment || {};
-  const address = e.address as string | null;
-  const rating = e.rating as number | null;
-  const userRatingCount = e.userRatingCount as number | null;
-  const openingHours = e.openingHours as string[] | null;
-  const websiteUri = e.websiteUri as string | null;
-  const googleMapsUri = e.googleMapsUri as string | null;
-  const photos = (e.photos as { name?: string }[]) ?? [];
+  const address = (e.address ?? details?.formattedAddress) as string | null;
+  const rating = (e.rating ?? details?.rating) as number | null;
+  const userRatingCount = (e.userRatingCount ?? details?.userRatingCount) as number | null;
+  const websiteUri = (e.websiteUri ?? details?.websiteUri) as string | null;
+  const googleMapsUri = (e.googleMapsUri ?? details?.googleMapsUri) as string | null;
+  const photos = ((e.photos ?? details?.photos) as { name?: string }[]) ?? [];
+
+  useEffect(() => {
+    const pid = pin.googlePlaceId;
+    if (!pid || photos.length > 0 || websiteUri) return;
+    fetch(`/api/enrich-place?placeId=${encodeURIComponent(pid)}`)
+      .then((r) => r.json())
+      .then((d) => setDetails(d))
+      .catch(() => {});
+  }, [pin.googlePlaceId, photos.length, websiteUri]);
+
+  useEffect(() => {
+    if (!pin.name?.trim()) return;
+    fetch(`/api/youtube-search?q=${encodeURIComponent(pin.name)}`)
+      .then((r) => r.json())
+      .then((d) => setYoutubeVideo(d.video ?? null))
+      .catch(() => setYoutubeVideo(null));
+  }, [pin.name]);
 
   const photoUrl = (name: string) =>
     `https://places.googleapis.com/v1/${name}/media?maxWidthPx=400&key=${mapsApiKey}`;
   const dirUrl = pin.coordinates
     ? `https://www.google.com/maps/dir/?api=1&destination=${pin.coordinates.lat},${pin.coordinates.lng}`
     : googleMapsUri ?? "#";
+  const mapsLink = googleMapsUri ?? dirUrl;
 
   return (
-    <div className="p-2 max-w-sm min-w-[260px] max-h-[70vh] overflow-y-auto">
-      {/* Opening hours & Website first (Google Maps enrichment) */}
-      {openingHours && openingHours.length > 0 && (
-        <div className="mb-3 text-xs">
-          <div className="font-medium text-gray-800">Opening hours</div>
-          <ul className="text-gray-600 mt-0.5">
-            {openingHours.slice(0, 7).map((h, i) => (
-              <li key={i}>{h}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {(websiteUri || googleMapsUri) && (
-        <div className="mb-3 flex gap-2">
-          {websiteUri && (
-            <a
-              href={websiteUri}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block bg-amber-600 text-white font-bold py-1.5 px-3 rounded text-xs hover:bg-amber-700"
-            >
-              🌐 Website / Menu
-            </a>
+    <div className="p-3 max-w-sm min-w-[240px] max-h-[70vh] overflow-y-auto">
+      <h3 className="font-bold text-base">{pin.name}</h3>
+
+      {/* Icons at top: directions, website, youtube, article, google maps — 20% larger (w-5 h-5) */}
+      <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+        <a
+          href={dirUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="p-2 rounded-full hover:bg-gray-100 text-gray-600 hover:text-gray-900 transition-colors"
+          title="Directions"
+        >
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z" />
+          </svg>
+        </a>
+        {websiteUri && (
+          <a
+            href={websiteUri}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-2 rounded-full hover:bg-blue-50 text-gray-600 hover:text-blue-600 transition-colors"
+            title="Website"
+          >
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+            </svg>
+          </a>
+        )}
+        {youtubeVideo && (
+          <a
+            href={`https://www.youtube.com/watch?v=${youtubeVideo.videoId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-2 rounded-full hover:bg-red-50 text-gray-600 hover:text-red-600 transition-colors"
+            title="Watch video"
+          >
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
+            </svg>
+          </a>
+        )}
+        {pin.sourceUrl && (
+          <a
+            href={pin.sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-2 rounded-full hover:bg-amber-50 text-gray-600 hover:text-amber-700 transition-colors"
+            title="Original article"
+          >
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z" />
+            </svg>
+          </a>
+        )}
+        <a
+          href={mapsLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="p-2 rounded-full hover:bg-blue-50 text-gray-600 hover:text-blue-600 transition-colors"
+          title="Open in Google Maps"
+        >
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+          </svg>
+        </a>
+      </div>
+
+      {/* Rating */}
+      {rating != null && (
+        <div className="flex items-center gap-1 mt-2 text-amber-600 text-sm">
+          <span>★</span> {rating.toFixed(1)}
+          {userRatingCount != null && (
+            <span className="text-gray-500">({userRatingCount.toLocaleString()} reviews)</span>
           )}
         </div>
       )}
 
-      {/* Name */}
-      <h3 className="font-bold text-base">{pin.name}</h3>
-
-      {/* Curated tip/note from article */}
-      {pin.note && (
-        <div className="mt-2 p-2 bg-amber-50 border-l-2 border-amber-500 text-sm text-gray-700">
-          {pin.note}
-        </div>
-      )}
+      {/* Address */}
+      {address && <p className="text-xs text-gray-600 mt-0.5">{address}</p>}
 
       {/* Photos */}
       {photos.length > 0 && (
         <div className="flex gap-1 mt-2 overflow-x-auto pb-1">
-          {photos.slice(0, 3).map((p, i) =>
+          {photos.slice(0, 4).map((p, i) =>
             p.name ? (
               <img
                 key={i}
@@ -110,42 +174,34 @@ function PinInfoWindow({
         </div>
       )}
 
-      {/* Rating */}
-      {rating != null && (
-        <div className="flex items-center gap-1 mt-1 text-amber-600 text-sm">
-          <span>★</span> {rating.toFixed(1)}
-          {userRatingCount != null && (
-            <span className="text-gray-500">({userRatingCount.toLocaleString()} reviews)</span>
-          )}
-        </div>
-      )}
-
-      {/* Address */}
-      {address && (
-        <p className="text-xs text-gray-600 mt-1">{address}</p>
-      )}
-
-      {/* Actions */}
-      <div className="flex flex-wrap gap-2 mt-3">
+      {/* YouTube video about this destination */}
+      {youtubeVideo && (
         <a
-          href={dirUrl}
+          href={`https://www.youtube.com/watch?v=${youtubeVideo.videoId}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex-1 min-w-[100px] text-center bg-blue-600 text-white font-bold py-1.5 px-2 rounded text-xs hover:bg-blue-700"
+          className="block mt-2 rounded overflow-hidden border border-gray-200 hover:border-gray-400 transition-colors group"
         >
-          🚗 Directions
+          <div className="relative aspect-video">
+            <img
+              src={youtubeVideo.thumbnailUrl}
+              alt={youtubeVideo.title}
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">
+              <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center text-gray-800 group-hover:bg-white">
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+          <div className="p-1.5 bg-gray-50">
+            <p className="text-xs font-medium text-gray-800 truncate">{youtubeVideo.title}</p>
+            <p className="text-[10px] text-gray-500">{youtubeVideo.channelTitle}</p>
+          </div>
         </a>
-        {pin.sourceUrl && (
-          <a
-            href={pin.sourceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 min-w-[100px] text-center bg-amber-600 text-white font-bold py-1.5 px-2 rounded text-xs hover:bg-amber-700"
-          >
-            📰 Original article
-          </a>
-        )}
-      </div>
+      )}
     </div>
   );
 }
@@ -161,6 +217,48 @@ const getCategoryIcon = (category: string) => {
   return "📍";
 };
 
+/** Inline create-trip from batch - one click, minimal form */
+function CreateTripFromBatch({ batch, onCreated }: { batch: string; onCreated: () => void }) {
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState(batch.slice(0, 40));
+  const handleCreate = async () => {
+    setCreating(true);
+    try {
+      const res = await fetch("/api/trips", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim() || batch.slice(0, 40), batch }),
+      });
+      if (res.ok) {
+        const t = await res.json();
+        onCreated();
+        window.location.href = `/trips/${t.id}`;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    setCreating(false);
+  };
+  return (
+    <div className="mt-2 flex gap-2">
+      <input
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Trip name"
+        className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded"
+      />
+      <button
+        onClick={handleCreate}
+        disabled={creating}
+        className="px-3 py-1.5 bg-[#1B365D] text-white text-sm rounded font-medium disabled:opacity-50"
+      >
+        {creating ? "…" : "Plan trip"}
+      </button>
+    </div>
+  );
+}
+
 export default function Home() {
   const [inputText, setInputText] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
@@ -170,6 +268,7 @@ export default function Home() {
   const [selected, setSelected] = useState<any>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
+  const [lastImportBatch, setLastImportBatch] = useState<string | null>(null);
 
   const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
   console.log("MAP KEY CHECK:", process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ? "EXISTS" : "MISSING");
@@ -178,9 +277,9 @@ export default function Home() {
     libraries: ["places"],
   });
 
-  // Load pins from Postgres (confirmed only for map)
+  // Load pins from Postgres (all pins so curated drafts are visible)
   useEffect(() => {
-    fetch("/api/pins?status=confirmed")
+    fetch("/api/pins")
       .then((r) => r.json())
       .then((data) => {
         if (Array.isArray(data)) {
@@ -229,6 +328,7 @@ export default function Home() {
 
   const listItemRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const sidebarRef = useRef<HTMLDivElement | null>(null);
+  const ignoreScrollUntilRef = useRef<number>(0);
 
   /** Scroll spy: as user scrolls sidebar, pan map to the location card most visible in viewport */
   useEffect(() => {
@@ -236,23 +336,33 @@ export default function Home() {
     if (!container || !map || locations.length === 0) return;
 
     const updateActiveFromScroll = () => {
+      if (Date.now() < ignoreScrollUntilRef.current) return;
       const containerRect = container.getBoundingClientRect();
       const viewportCenter = containerRect.top + containerRect.height / 2;
+      const isScrolledToBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 20;
 
       let bestLoc: (typeof locations)[0] | null = null;
       let bestDistance = Infinity;
-      for (const loc of locations) {
-        const el = listItemRefs.current[loc.id];
-        if (!el) continue;
-        const elRect = el.getBoundingClientRect();
-        const elCenter = elRect.top + elRect.height / 2;
-        const distance = Math.abs(elCenter - viewportCenter);
-        if (elRect.bottom >= containerRect.top && elRect.top <= containerRect.bottom && distance < bestDistance) {
-          bestDistance = distance;
-          bestLoc = loc;
+      const lastLoc = locations[locations.length - 1];
+      const lastEl = lastLoc ? listItemRefs.current[lastLoc.id] : null;
+      const lastRect = lastEl?.getBoundingClientRect();
+      const lastIsVisible = lastRect && lastRect.bottom >= containerRect.top && lastRect.top <= containerRect.bottom;
+
+      if (isScrolledToBottom && lastIsVisible && lastLoc?.coordinates?.lat != null) {
+        bestLoc = lastLoc;
+      } else {
+        for (const loc of locations) {
+          const el = listItemRefs.current[loc.id];
+          if (!el) continue;
+          const elRect = el.getBoundingClientRect();
+          const elCenter = elRect.top + elRect.height / 2;
+          const distance = Math.abs(elCenter - viewportCenter);
+          if (elRect.bottom >= containerRect.top && elRect.top <= containerRect.bottom && distance < bestDistance) {
+            bestDistance = distance;
+            bestLoc = loc;
+          }
         }
       }
-      if (!bestLoc && locations.length > 0) bestLoc = locations[0];
       if (bestLoc?.coordinates?.lat != null && bestLoc?.coordinates?.lng != null) {
         setSelected((prev: (typeof locations)[0] | null) => {
           if (prev?.id === bestLoc?.id) return prev;
@@ -271,6 +381,7 @@ export default function Home() {
   /** Click sidebar location: pan map to pin, open InfoWindow, highlight in list */
   const handleLocationClick = (loc: (typeof locations)[0]) => {
     if (!loc.coordinates?.lat || !loc.coordinates?.lng) return;
+    ignoreScrollUntilRef.current = Date.now() + 400; // Prevent scroll spy from overwriting for 400ms
     setSelected(loc);
     if (map) {
       map.panTo(loc.coordinates);
@@ -357,6 +468,7 @@ export default function Home() {
       setLocations((prev) => [...prev, ...newPins]);
       setInputText("");
       if (newPins.length > 1) setSourceUrl(""); // clear URL after bulk so user can paste next article
+      setLastImportBatch(data.importBatch ?? (newPins[0] as { importBatch?: string })?.importBatch ?? null);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Error curating. Check console.";
       console.error("Curate error:", msg, e);
@@ -476,16 +588,21 @@ export default function Home() {
   if (!isLoaded) return <div className="p-8">Loading Map...</div>;
 
   return (
-    <div className="flex h-screen font-sans">
-      <div ref={sidebarRef} className="w-1/3 min-h-0 overflow-y-auto p-4 bg-gray-100 border-r border-gray-300">
+    <div className="flex h-screen overflow-hidden font-sans">
+      <div ref={sidebarRef} className="w-1/3 shrink-0 h-full min-h-0 overflow-y-auto overflow-x-hidden p-4 bg-gray-100 border-r border-gray-300">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-xl font-bold text-blue-600">TraCur</h1>
-          <Link
-            href="/review"
-            className="text-sm font-medium px-3 py-1.5 rounded-lg bg-[#1B365D] text-white hover:opacity-90"
-          >
-            Review drafts
-          </Link>
+          <div className="flex gap-2">
+            <Link href="/trips" className="text-sm font-medium px-2 py-1.5 rounded text-gray-700 hover:bg-gray-200">
+              Trips
+            </Link>
+            <Link
+              href="/review"
+              className="text-sm font-medium px-3 py-1.5 rounded-lg bg-[#1B365D] text-white hover:opacity-90"
+            >
+              Review
+            </Link>
+          </div>
         </div>
         
         {/* ADD TEXT */}
@@ -500,7 +617,7 @@ export default function Home() {
           <input
             type="url"
             className="w-full p-2 border rounded text-sm mb-2"
-            placeholder="Or paste URL only to scrape article (e.g. theguardian.com/...)"
+            placeholder="Paste URL (e.g. theguardian.com/travel/.../readers-favourite-beaches-europe)"
             value={sourceUrl}
             onChange={(e) => setSourceUrl(e.target.value)}
           />
@@ -511,6 +628,9 @@ export default function Home() {
           >
             {loading ? "Curating..." : "Curate"}
           </button>
+          {lastImportBatch && (
+            <CreateTripFromBatch batch={lastImportBatch} onCreated={() => setLastImportBatch(null)} />
+          )}
         </div>
 
         {/* DATA TOOLS */}
@@ -602,7 +722,7 @@ export default function Home() {
                 {batchLabel(loc.importBatch, loc.sourceUrl)}
               </div>
               {loc.note && (
-                <p className="text-xs text-gray-600 mt-1.5 italic leading-relaxed whitespace-pre-wrap">
+                <p className="text-xs text-gray-600 mt-1.5 leading-relaxed whitespace-pre-wrap max-h-32 overflow-y-auto">
                   {loc.note}
                 </p>
               )}
@@ -611,7 +731,7 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="w-2/3">
+      <div className="flex-1 min-h-0 overflow-hidden">
         <GoogleMap
           center={{ lat: 38.038, lng: 14.022 }}
           zoom={3}

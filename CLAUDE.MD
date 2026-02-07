@@ -1100,23 +1100,25 @@ calendarExports/
 When modifying `/api/curate` or `app/page.tsx`, preserve these behaviors:
 
 ### Curate Extraction
-- **Primary place over town:** When text describes a destination with a dominant feature (beach, cathedral), extract that FEATURE with its proper name (e.g. "Spiaggia di Cefalù" not just "Cefalù").
+- **Multiple main locations:** Identify the main locations in the article (beaches, restaurants, attractions, etc.). Create a pin for each.
+- **Relevant excerpt per location:** Each pin gets the RELEVANT excerpt — the portion of the article that describes THAT specific place. Never mix excerpts between places (Spiaggia gets beach description, Duomo gets cathedral description).
+- **Article title drives focus:** When scraped, use article title (e.g. "Beaches") to identify which locations are primary.
+- **Primary place over town:** Extract the feature with its proper name (e.g. "Spiaggia di Cefalù" not just "Cefalù").
 - **Local names:** Use Italian names for Italian places (Spiaggia=beach, Duomo=cathedral). Same for other locales.
-- **Note pairing:** Each note must belong ONLY to its place. Never mix notes between places (e.g. Spiaggia gets its own note, Petrokopio gets its own).
-- **Category extraction:** Include category (Beach, Eat, Stay, Culture, Adventure, Do) in Gemini output. Use for map icon/symbol.
-- **Location context:** First pass extracts city/region (e.g. "Cefalù, Italy") for accurate geocoding; append to Places query.
-- **Display name:** Persist extracted name (e.g. "Spiaggia di Cefalù") to DB when available; don't overwrite with generic Google result.
+- **Category extraction:** Include category (Beach, Eat, Stay, Culture, Adventure, Do). Use for map icon/symbol.
+- **Location context:** First pass extracts city/region for geocoding; append to Places query.
 
 ### Sidebar & Map Sync
-- **Scroll-to-map:** When user scrolls the left sidebar, the map MUST pan to the pin for the card most visible (center of viewport).
-- **Note in sidebar:** Each location card shows its curated note. Notes must appear in the left scroll bar.
+- **Click selection:** When user clicks a sidebar card, that location MUST stay selected. Scroll spy must not overwrite for ~400ms after click (ignoreScrollUntilRef).
+- **Scroll-to-map:** When user scrolls the left sidebar, the map pans to the pin for the card most visible (center of viewport).
+- **Note in sidebar:** Each location card shows its full curated note/excerpt.
 - **Category icons:** Map markers and list items use category-based icons (Beach, Eat, Stay, etc.).
-- **Sidebar scroll:** Sidebar needs `min-h-0` in flex layout so `overflow-y-auto` works (user can scroll to top).
+- **Sidebar scroll:** Sidebar needs `min-h-0` + `overflow-hidden` on parent so `overflow-y-auto` works (user can scroll to top).
 
 ### Data Flow
 - **google_place_id:** Save for enrich-place API (review page ratings). Curate sets `google_place_id = place_id`.
 - **Pins API:** Return `rating` and `userRatingCount` at top level (flattened from enrichment) for review page.
-- **URL scraping + bulk extraction:** Both must be supported. Scrape via Readability; bulk extract via Gemini JSON array.
+- **URL scraping:** Scrape via Readability; pass article title to extraction for focus (e.g. "Beaches" → extract beach).
 
 ---
 

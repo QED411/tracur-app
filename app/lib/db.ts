@@ -34,4 +34,17 @@ export async function ensureSchema() {
     CREATE UNIQUE INDEX IF NOT EXISTS pins_place_id_key 
     ON pins (place_id) WHERE place_id IS NOT NULL
   `;
+
+  // Trips table
+  await sql`
+    CREATE TABLE IF NOT EXISTS trips (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL,
+      destination TEXT,
+      start_date DATE,
+      end_date DATE,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+  await sql`ALTER TABLE pins ADD COLUMN IF NOT EXISTS trip_id UUID REFERENCES trips(id) ON DELETE SET NULL`;
 }

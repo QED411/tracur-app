@@ -41,6 +41,9 @@ export async function PATCH(
     if (body.rating !== undefined || body.userRatingCount !== undefined) {
       enrichment = { ...enrichment, rating: body.rating ?? enrichment.rating, userRatingCount: body.userRatingCount ?? enrichment.userRatingCount };
     }
+    if (body.ticketUrl !== undefined) {
+      enrichment = { ...enrichment, ticketUrl: body.ticketUrl ? String(body.ticketUrl).trim() : null };
+    }
 
     const rows = await sql`
       UPDATE pins SET status = ${status}, lat = ${lat}, lng = ${lng}, enrichment = ${JSON.stringify(enrichment)}::jsonb
